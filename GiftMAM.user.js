@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Gift Many a Mouse
-// @namespace    http://tampermonkey.net/
+// @namespace    https://github.com/Photaz/GiftMAM
 // @version      1.0
 // @description  Scrapes, checks history, and gifts new users directly from the browser.
 // @author       Photaz
