@@ -4,6 +4,7 @@
 // @version      1.0
 // @description  Scrapes, checks history, and gifts new users directly from the browser.
 // @author       Photaz
+// @license      MIT
 // @match        https://www.myanonamouse.net/newUsers.php
 // @grant        none
 // ==/UserScript==
