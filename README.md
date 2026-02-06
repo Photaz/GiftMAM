@@ -31,7 +31,7 @@ This script requires a userscript manager to run.
 * [Tampermonkey](https://www.tampermonkey.net/)
 
 ## Usage
-1.  Navigate to the [New Users Page](newUsers.php).
+1.  Navigate to newUsers.php.
 2.  The **Gift Many A Mouse** panel will appear in the bottom-right corner.
 3.  Select your batch limit (e.g., `100` or `ALL`).
 4.  Click **Start Gifting**.
