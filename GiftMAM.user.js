@@ -6,6 +6,8 @@
 // @author       Photaz
 // @license      MIT
 // @match        https://www.myanonamouse.net/newUsers.php
+// @updateURL    https://github.com/Photaz/GiftMAM/raw/main/GiftMAM.user.js
+// @downloadURL  https://github.com/Photaz/GiftMAM/raw/main/GiftMAM.user.js
 // @grant        none
 // ==/UserScript==
 
