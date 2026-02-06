@@ -1,4 +1,4 @@
-# GiftMAM
+# Gift Many A Mouse
 Scrapes, checks history, and gifts new users directly from the browser.
 
 ## Installation
