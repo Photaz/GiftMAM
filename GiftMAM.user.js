@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Gift Many a Mouse
+// @name         Gift Many A Mouse
 // @namespace    https://github.com/Photaz/GiftMAM
 // @version      1.0
 // @description  Scrapes, checks history, and gifts new users directly from the browser.
@@ -26,42 +26,50 @@
     // === UI STYLES ===
     const style = document.createElement('style');
     style.textContent = `
+        /* --- MAIN PANEL (Fixed Bottom Right) --- */
         #mam-gift-panel {
-            position: fixed; bottom: 20px; right: 20px;
+            position: fixed;               /* Pins to the viewport */
+            bottom: 20px; right: 20px;     /* Bottom Right Anchor */
+            width: 300px;
+
             background: #1a1a1a; color: #eee;
             border: 1px solid #444; border-radius: 8px;
-            padding: 15px; width: 300px; z-index: 9999;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            padding: 15px;
+            z-index: 9999;                 /* Floats ABOVE everything */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
             font-family: 'Segoe UI', sans-serif; font-size: 13px;
-            transition: all 0.3s ease;
+            text-align: left;
+            transition: all 0.3s ease;     /* Smooth minimize animation */
         }
 
         /* --- MINIMIZED STATE --- */
         #mam-gift-panel.mam-minimized {
-            width: 50px; height: 50px;
+            width: 60px; height: 60px;
             padding: 0;
-            border-radius: 50%;
+            border-radius: 50%;            /* Circle shape */
             cursor: pointer;
             overflow: hidden;
             display: flex; align-items: center; justify-content: center;
             background: #2E7D32;
             border: 2px solid #4CAF50;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
         }
         #mam-gift-panel.mam-minimized:hover { transform: scale(1.1); }
         #mam-gift-panel.mam-minimized > .panel-content { display: none; }
         #mam-gift-panel.mam-minimized > .minimized-icon { display: block; }
 
-        .minimized-icon { display: none; font-size: 24px; }
+        .minimized-icon { display: none; font-size: 30px; }
 
         /* --- HEADER & CONTROLS --- */
         .panel-header {
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 10px;
         }
-        .header-left {
-            display: flex; align-items: center; gap: 10px;
+        .header-left { display: flex; align-items: center; gap: 10px; }
+
+        .panel-header h3 {
+            margin: 0; color: #4CAF50; font-size: 15px; font-weight: bold;
         }
-        .panel-header h3 { margin: 0; color: #4CAF50; font-size: 16px; }
 
         .limit-select {
             background: #333; color: #eee;
@@ -73,14 +81,12 @@
 
         .btn-minimize {
             background: none; border: none; color: #aaa;
-            font-size: 20px; line-height: 1; cursor: pointer;
-            padding: 0 5px;
+            font-size: 20px; line-height: 1; cursor: pointer; padding: 0 5px;
         }
         .btn-minimize:hover { color: #fff; }
 
         .stat-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
 
-        /* --- LOG BOX --- */
         #mam-log {
             margin-top: 10px; height: 100px; overflow-y: auto;
             background: #000; border: 1px solid #333; padding: 5px;
@@ -88,7 +94,6 @@
             display: flex; flex-direction: column;
         }
 
-        /* --- ACTION BUTTONS --- */
         .control-row { display: flex; gap: 10px; margin-top: 10px; }
 
         button {
@@ -162,6 +167,7 @@
         links.forEach(link => {
             let name = link.textContent.trim().split(' ')[0];
             if (db.has(name)) {
+                // Compatibility: Check for our mark OR MAM+ mark
                 if (!link.innerHTML.includes('✅')) {
                     link.innerHTML += ` <span class="mam-gifted-mark">✅</span>`;
                 }
@@ -199,7 +205,7 @@
                 });
             }
         });
-        // Filter duplicates based on name
+        // Filter duplicates
         const seen = new Set();
         return targets.filter(item => {
             const duplicate = seen.has(item.name);
@@ -210,6 +216,8 @@
 
     // === UI MANAGER ===
     function createPanel() {
+        // --- INJECTION ---
+        // We inject into body to ensure it floats over everything
         const div = document.createElement('div');
         div.id = 'mam-gift-panel';
 
@@ -221,7 +229,7 @@
             <div class="panel-content">
                 <div class="panel-header">
                     <div class="header-left">
-                        <h3>🎁 Gift Many a Mouse</h3>
+                        <h3>🎁 Gift Many A Mouse</h3>
                         <select id="gift-limit" class="limit-select" title="Batch Limit">
                             <option value="5">5</option>
                             <option value="10">10</option>
@@ -249,6 +257,7 @@
                 </div>
             </div>
         `;
+
         document.body.appendChild(div);
 
         // --- Logic Hooks ---
@@ -264,8 +273,9 @@
         if (pruned > 0) log(`Pruned ${pruned} old records.`, 'info');
 
         visualizeStatus();
+
+        // Initial Count
         const targets = getTargets();
-        // Filter: Not in My DB AND Not in MAM Plus DB
         const validTargets = targets.filter(t => !db.has(t.name) && !t.isMamPlusGifted);
 
         div.querySelector('#ui-targets').textContent = targets.length;
@@ -293,8 +303,6 @@
         div.querySelector('#btn-run').onclick = async function() {
             const btnRun = this;
             const btnStop = div.querySelector('#btn-stop');
-
-            // Get Limit
             const limitSelect = div.querySelector('#gift-limit');
             const limitVal = limitSelect.value;
             const maxGifts = limitVal === 'ALL' ? Infinity : parseInt(limitVal, 10);
@@ -306,9 +314,8 @@
             btnStop.style.display = "block";
             stopRequested = false;
 
-            // Re-evaluate targets at run time to catch any manual changes or MAM plus updates
+            // Re-evaluate to catch any manual changes
             const currentTargets = getTargets();
-            // Filter: Not in My DB AND Not in MAM Plus DB
             const runnableTargets = currentTargets.filter(t => !db.has(t.name) && !t.isMamPlusGifted);
 
             let successCount = 0;
@@ -331,14 +338,14 @@
 
                 if (result.success) {
                     db.add(target.name);
-                    
-                    // Visual Sync with MAM Plus (Apply their styles so we look consistent)
-                    target.element.classList.add('mp_gifted'); 
+
+                    // Visual Sync
+                    target.element.classList.add('mp_gifted');
                     if (!target.element.innerHTML.includes('✅')) {
                         target.element.innerHTML += ` <span class="mam-gifted-mark">✅</span>`;
                     }
-                    
-                    visualizeStatus();
+                    visualizeStatus(); // Refresh fades
+
                     log(`✅ Sent ${GIFT_AMOUNT} to ${target.name}`, 'success');
                     successCount++;
                     document.getElementById('ui-db-count').textContent = db.count();
