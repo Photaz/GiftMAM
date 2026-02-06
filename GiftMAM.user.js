@@ -185,12 +185,27 @@
 
     function getTargets() {
         const links = document.querySelectorAll('.blockBodyCon label a');
-        const users = [];
+        const targets = [];
         links.forEach(link => {
             let name = link.textContent.trim().split(' ')[0];
-            if (name) users.push(name);
+            // Check if MAM Plus has already gifted this user
+            const isMamPlusGifted = link.classList.contains('mp_gifted') || link.innerHTML.includes('✅');
+
+            if (name) {
+                targets.push({
+                    name: name,
+                    element: link,
+                    isMamPlusGifted: isMamPlusGifted
+                });
+            }
         });
-        return [...new Set(users)];
+        // Filter duplicates based on name
+        const seen = new Set();
+        return targets.filter(item => {
+            const duplicate = seen.has(item.name);
+            seen.add(item.name);
+            return !duplicate;
+        });
     }
 
     // === UI MANAGER ===
@@ -250,7 +265,8 @@
 
         visualizeStatus();
         const targets = getTargets();
-        const validTargets = targets.filter(u => !db.has(u));
+        // Filter: Not in My DB AND Not in MAM Plus DB
+        const validTargets = targets.filter(t => !db.has(t.name) && !t.isMamPlusGifted);
 
         div.querySelector('#ui-targets').textContent = targets.length;
         div.querySelector('#ui-new').textContent = validTargets.length;
@@ -285,38 +301,49 @@
 
             // UI State: Running
             btnRun.disabled = true;
-            limitSelect.disabled = true; // Lock dropdown while running
+            limitSelect.disabled = true;
             btnRun.textContent = `Running (Limit: ${limitVal})...`;
             btnStop.style.display = "block";
             stopRequested = false;
 
+            // Re-evaluate targets at run time to catch any manual changes or MAM plus updates
+            const currentTargets = getTargets();
+            // Filter: Not in My DB AND Not in MAM Plus DB
+            const runnableTargets = currentTargets.filter(t => !db.has(t.name) && !t.isMamPlusGifted);
+
             let successCount = 0;
 
-            for (const user of validTargets) {
+            for (const target of runnableTargets) {
                 if (stopRequested) {
                     log("🛑 Operation stopped by user.", "warn");
                     break;
                 }
 
-                // Check Limit
                 if (successCount >= maxGifts) {
                     log(`✅ Limit of ${maxGifts} reached. Stopping.`, "success");
                     break;
                 }
 
-                log(`Gifting ${user}...`, 'info');
+                log(`Gifting ${target.name}...`, 'info');
 
                 const waitTime = DELAY_MS + Math.random() * 2000;
-                const result = await sendGift(user);
+                const result = await sendGift(target.name);
 
                 if (result.success) {
-                    db.add(user);
+                    db.add(target.name);
+                    
+                    // Visual Sync with MAM Plus (Apply their styles so we look consistent)
+                    target.element.classList.add('mp_gifted'); 
+                    if (!target.element.innerHTML.includes('✅')) {
+                        target.element.innerHTML += ` <span class="mam-gifted-mark">✅</span>`;
+                    }
+                    
                     visualizeStatus();
-                    log(`✅ Sent ${GIFT_AMOUNT} to ${user}`, 'success');
+                    log(`✅ Sent ${GIFT_AMOUNT} to ${target.name}`, 'success');
                     successCount++;
                     document.getElementById('ui-db-count').textContent = db.count();
                 } else {
-                    log(`❌ Failed ${user}: ${result.error}`, 'error');
+                    log(`❌ Failed ${target.name}: ${result.error}`, 'error');
                 }
 
                 if (stopRequested || successCount >= maxGifts) break;
