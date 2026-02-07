@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gift Many A Mouse
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      1.0
+// @version      1.02
 // @description  Scrapes, checks history, and gifts new users directly from the browser.
 // @author       Photaz
 // @license      MIT
@@ -351,6 +351,10 @@
                     document.getElementById('ui-db-count').textContent = db.count();
                 } else {
                     log(`❌ Failed ${target.name}: ${result.error}`, 'error');
+                    if (result.error && result.error.includes("Amount more than current points")) {
+                        log("🛑 Stopped due to insufficient bonus points.", "warn");
+                        break;
+                    }
                 }
 
                 if (stopRequested || successCount >= maxGifts) break;
