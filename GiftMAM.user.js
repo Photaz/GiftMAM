@@ -9,14 +9,14 @@
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getResourceURL
-// @icon         https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/svg/main.svg
-// @resource     https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/cheese-wedge.svg
-// @resource     iconGift https://raw.githubusercontent.com/Photaz/GiftMAM/refs/dev/main/assets/svg/gift.svg
-// @resource     iconTrap https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/svg/mouse-trap.svg
-// @resource     iconMouse https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/svg/mouse.svg
-// @resource     iconMain https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/svg/main.svg
-// @resource     iconSettings https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/svg/settings.svg
-// @resource     iconMinimize https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/svg/minimize.svg
+// @icon         https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/main.svg
+// @resource     iconCheese https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/cheese-wedge.svg
+// @resource     iconGift https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/gift.svg
+// @resource     iconTrap https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/mouse-trap.svg
+// @resource     iconMouse https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/mouse.svg
+// @resource     iconMain https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/main.svg
+// @resource     iconSettings https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/settings.svg
+// @resource     iconMinimize https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/dev/assets/minimize.svg
 // @connect      api.github.com
 // ==/UserScript==
 
