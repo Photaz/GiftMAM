@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         GiftMAM
-// @namespace    https://github.com/Photaz/GiftMAM
+// @namespace    https://github.com/Photaz/GiftMAM/tree/dev
 // @version      0.1
 // @description  GiftMAM rebuild
 // @author       Photaz
