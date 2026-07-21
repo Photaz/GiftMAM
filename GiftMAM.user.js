@@ -5,6 +5,9 @@
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
+// @exclude      https://www.myanonamouse.net/login.php*
+// @updateURL    https://github.com/Photaz/GiftMAM/raw/dev/GiftMAM.user.js
+// @downloadURL  https://github.com/Photaz/GiftMAM/raw/dev/GiftMAM.user.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
