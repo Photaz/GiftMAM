@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.0.0
+// @version      3.0.2
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -940,10 +940,14 @@
 
         async loadAndMerge(newTargets, isRefresh = false) {
             const key = this.getStorageKey();
-            let cached = [];
-            try { cached = JSON.parse(GM_getValue(key, '[]')); } catch(e) {}
+            const isNewUsersPage = window.location.pathname === '/newUsers.php';
 
-            let combined = [...cached, ...newTargets];
+            let cached = [];
+            if (isNewUsersPage) {
+                try { cached = JSON.parse(GM_getValue(key, '[]')); } catch(e) {}
+            }
+
+            let combined = isNewUsersPage ? [...cached, ...newTargets] : [...newTargets];
 
             const uniqueMap = new Map();
             combined.forEach(u => {
@@ -1091,22 +1095,27 @@
                     Logger.log(`API Error: ${error.message}`);
                 }
             }
+
+            if (StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
+                Engine.triggerHeartbeat();
+            }
         }
     };
 
     const Engine = {
         lastApiCall: 0,
+        lastHeartbeat: 0,
         heartbeatTimer: null,
 
         // Universal Rate Limiter: Ensures minGapMs passes between any API calls
-        async enforceRateLimit(minGapMs = 15000) {
+        async enforceRateLimit(minGapMs = 15000, context = 'background') {
             const now = Date.now();
             const elapsed = now - this.lastApiCall;
             if (elapsed < minGapMs && this.lastApiCall !== 0) {
                 const waitTime = minGapMs - elapsed;
                 let slept = 0;
                 while (slept < waitTime) {
-                    if (!StateManager.state.isRunning) return false;
+                    if (context === 'batch' && !StateManager.state.isRunning) return false;
                     await new Promise(resolve => setTimeout(resolve, 200));
                     slept += 200;
                 }
@@ -1140,35 +1149,114 @@
         initHeartbeat() {
             if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer);
 
-            // Treat initial script load as an API interaction to push the first ping back 15m
-            this.lastApiCall = Date.now();
+            this.lastHeartbeat = Date.now();
             const targetInterval = 15 * 60 * 1000;
 
             const checkHeartbeat = () => {
                 const buyAmt = StateManager.state.config.buyAmount;
                 const renewVip = StateManager.state.config.renewVip;
-                const timeSinceLastCall = Date.now() - this.lastApiCall;
+                const timeSinceLastHeartbeat = Date.now() - this.lastHeartbeat;
 
-                if (timeSinceLastCall >= targetInterval) {
+                if (timeSinceLastHeartbeat >= targetInterval) {
                     if ((buyAmt !== 'Off' || renewVip) && !StateManager.state.isRunning) {
                         this.triggerHeartbeat().finally(() => {
+                            this.lastHeartbeat = Date.now();
                             this.heartbeatTimer = setTimeout(checkHeartbeat, targetInterval);
                         });
                         return;
+                    } else {
+                        this.lastHeartbeat = Date.now();
                     }
                 }
 
-                // If skipped (due to recent API activity or active running), delay until next valid window
-                const delay = Math.max(5000, targetInterval - timeSinceLastCall);
+                const delay = Math.max(5000, targetInterval - timeSinceLastHeartbeat);
                 this.heartbeatTimer = setTimeout(checkHeartbeat, delay);
             };
 
             this.heartbeatTimer = setTimeout(checkHeartbeat, targetInterval);
         },
 
+        async processStoreQueue(vipUntilStr = null, context = 'background') {
+            const currentBP = StateManager.state.currentBP || 0;
+            const buyAmount = StateManager.state.config.buyAmount;
+            const buyWhen = StateManager.state.config.buyWhen;
+
+            const attemptPurchaseLock = async () => {
+                const lockId = Math.random().toString();
+                GM_setValue('mam_purchase_mutex', lockId);
+                await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+                if (GM_getValue('mam_purchase_mutex') !== lockId) return false;
+                const lastBuy = parseInt(GM_getValue('mam_last_buy_time', '0'), 10);
+                if (Date.now() - lastBuy < 30000) return false;
+                GM_setValue('mam_last_buy_time', Date.now().toString());
+                return true;
+            };
+
+            // 1. VIP Renewal Evaluation
+            if (StateManager.state.config.renewVip && vipUntilStr) {
+                const vipExpiration = new Date(vipUntilStr.replace(/-/g, '/')).getTime();
+                const remainingTimeMs = vipExpiration - Date.now();
+                const maxVipMs = 90 * 24 * 60 * 60 * 1000;
+                const minAllowedPurchaseMs = 7 * 24 * 60 * 60 * 1000;
+
+                if (remainingTimeMs <= (maxVipMs - minAllowedPurchaseMs) && currentBP >= (StateManager.state.config.minReserve + 1250)) {
+                    if (await attemptPurchaseLock()) {
+                        Logger.log("Renewing VIP...");
+                        const passed = await this.enforceRateLimit(15000, context);
+                        if (!passed) return false;
+                        if (context === 'batch' && !StateManager.state.isRunning) return false;
+
+                        const res = await fetch('/json/bonusBuy.php?spendtype=VIP&duration=max');
+                        this.lastApiCall = Date.now();
+
+                        if (res.ok) {
+                            const vipData = await res.json();
+                            if (vipData.success) {
+                                Logger.log(`${logIcon('crown')} VIP renewed...`);
+                                AuditLogger.add("Renewed VIP status.");
+                                if (vipData.seedbonus !== undefined) StateManager.updateBP(parseInt(vipData.seedbonus, 10));
+                            } else {
+                                Logger.log(`VIP Renewal Rejected: ${vipData.error || 'Unknown error'}`);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Upload Buy Evaluation
+            if (buyAmount !== 'Off' && currentBP >= buyWhen) {
+                const parsedAmount = buyAmount === 'Max' ? 'Max Affordable ' : parseInt(buyAmount, 10);
+                const logLabel = buyAmount === 'Max' ? 'Max' : `${parsedAmount}GB`;
+
+                if (await attemptPurchaseLock()) {
+                    Logger.log(`Buying ${logLabel} upload...`);
+                    const passed = await this.enforceRateLimit(15000, context);
+                    if (!passed) return false;
+                    if (context === 'batch' && !StateManager.state.isRunning) return false;
+
+                    const res = await fetch(`/json/bonusBuy.php?spendtype=upload&amount=${encodeURIComponent(parsedAmount)}`);
+                    this.lastApiCall = Date.now();
+
+                    if (res.ok) {
+                        const uData = await res.json();
+                        if (uData.success) {
+                            Logger.log(`${logIcon('buy')} (${logLabel}) bought.`);
+                            AuditLogger.add(`${logLabel} bought.`);
+                            if (uData.seedbonus !== undefined) StateManager.updateBP(parseInt(uData.seedbonus, 10));
+                        } else {
+                            Logger.log(`Upload buy failed: ${uData.error}`);
+                        }
+                    }
+                }
+            }
+            return true;
+        },
+
         async triggerHeartbeat() {
             try {
-                await this.enforceRateLimit(15000);
+                const passed = await this.enforceRateLimit(15000, 'background');
+                if (!passed) return;
+
                 const response = await fetch(`https://www.myanonamouse.net/jsonLoad.php?_t=${Date.now()}`, { cache: 'no-store' });
                 this.lastApiCall = Date.now();
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1178,78 +1266,7 @@
                     StateManager.updateBP(parseInt(data.seedbonus, 10));
                 }
 
-                const currentBP = StateManager.state.currentBP || 0;
-
-                // Concurrency Mutex: Prevents double purchasing across tabs
-                const attemptPurchaseLock = async () => {
-                    const lockId = Math.random().toString();
-                    GM_setValue('mam_purchase_mutex', lockId);
-                    await new Promise(r => setTimeout(r, 50 + Math.random() * 100)); // Jitter
-                    if (GM_getValue('mam_purchase_mutex') !== lockId) return false;
-                    const lastBuy = parseInt(GM_getValue('mam_last_buy_time', '0'), 10);
-                    if (Date.now() - lastBuy < 30000) return false; // 30s global cooldown
-                    GM_setValue('mam_last_buy_time', Date.now().toString());
-                    return true;
-                };
-
-                // VIP Renewal Block
-                if (StateManager.state.config.renewVip && data.vip_until) {
-                    const vipExpiration = new Date(data.vip_until.replace(/-/g, '/')).getTime();
-                    const remainingTimeMs = vipExpiration - Date.now();
-                    const maxVipMs = 90 * 24 * 60 * 60 * 1000;
-                    const minAllowedPurchaseMs = 7 * 24 * 60 * 60 * 1000;
-
-                    if (remainingTimeMs <= (maxVipMs - minAllowedPurchaseMs)) {
-                        const reserve = StateManager.state.config.minReserve;
-                        if (currentBP >= reserve + 1250) {
-                            if (await attemptPurchaseLock()) {
-                                Logger.log("Renewing VIP...");
-                                await this.enforceRateLimit(15000);
-                                const res = await fetch('/json/bonusBuy.php?spendtype=VIP&duration=max');
-                                this.lastApiCall = Date.now();
-
-                                if (res.ok) {
-                                    const vipData = await res.json();
-                                    if (vipData.success) {
-                                        Logger.log(`${logIcon('crown')} VIP renewed...`);
-                                        AuditLogger.add("Renewed VIP status.");
-                                        if (vipData.seedbonus !== undefined) StateManager.updateBP(parseInt(vipData.seedbonus, 10));
-                                    } else {
-                                        Logger.log(`VIP Renewal Rejected: ${vipData.error || 'Unknown error'}`);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Upload Amount Block
-                const buyAmount = StateManager.state.config.buyAmount;
-                const buyWhen = StateManager.state.config.buyWhen;
-
-                if (buyAmount !== 'Off' && currentBP >= buyWhen) {
-                    const parsedAmount = buyAmount === 'Max' ? 'Max Affordable ' : parseInt(buyAmount, 10);
-                    const logLabel = buyAmount === 'Max' ? 'Max' : `${parsedAmount}GB`;
-
-                    if (await attemptPurchaseLock()) {
-                        Logger.log(`Buying ${logLabel} upload...`);
-                        await this.enforceRateLimit(15000);
-                        const res = await fetch(`/json/bonusBuy.php?spendtype=upload&amount=${encodeURIComponent(parsedAmount)}`);
-                        this.lastApiCall = Date.now();
-
-                        if (res.ok) {
-                            const uData = await res.json();
-                            if (uData.success) {
-                                Logger.log(`${logIcon('buy')} (${logLabel}) bought.`);
-                                AuditLogger.add(`${logLabel} bought.`);
-                                if (uData.seedbonus !== undefined) StateManager.updateBP(parseInt(uData.seedbonus, 10));
-                            } else {
-                                Logger.log(`Upload buy failed: ${uData.error}`);
-                            }
-                        }
-                    }
-                }
-
+                await this.processStoreQueue(data.vip_until, 'background');
             } catch (err) {
                 Logger.log(`Heartbeat Error: ${err.message}`);
             }
@@ -1326,7 +1343,7 @@
 
                 try {
                     // Pre-emptively await the rate limit (15 seconds) with interruptibility
-                    const limitPassed = await this.enforceRateLimit(15000);
+                    const limitPassed = await this.enforceRateLimit(15000, 'batch');
                     if (!limitPassed || !StateManager.state.isRunning) {
                         abortReason = "stopped";
                         break;
@@ -1412,6 +1429,19 @@
                     StateManager.updateProgressBar(pct);
                     StateManager.broadcast('PROGRESS_SYNC', { progress: pct, bp: StateManager.state.currentBP });
 
+                    // Weave in Store Queue mid-batch to prevent hitting the cap
+                    const buyAmount = StateManager.state.config.buyAmount;
+                    const buyWhen = StateManager.state.config.buyWhen;
+                    const lastBuy = parseInt(GM_getValue('mam_last_buy_time', '0'), 10);
+
+                    if (buyAmount !== 'Off' && StateManager.state.currentBP >= buyWhen && (Date.now() - lastBuy >= 30000)) {
+                        const storeProcessed = await this.processStoreQueue(null, 'batch');
+                        if (!storeProcessed || !StateManager.state.isRunning) {
+                            abortReason = "stopped";
+                            break;
+                        }
+                    }
+
                 } catch (e) {
                     Logger.log(`${logIcon('error', 13)} ${user.name}: ${e.message}`);
                 }
@@ -1426,6 +1456,10 @@
             }
 
             this.resetUI();
+
+            if (StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
+                this.triggerHeartbeat();
+            }
         }
     };
 
@@ -1959,6 +1993,11 @@
     ForumManager.init();
     Engine.initHeartbeat();
     AuditLogger.render();
+
+    // Check store queue on F5/Page Load if condition is met
+    if ((StateManager.state.config.buyAmount !== 'Off' || StateManager.state.config.renewVip) && StateManager.state.currentBP !== null && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
+        Engine.triggerHeartbeat();
+    }
 
     // Dynamically maintain queue metrics on database adjustment events
     const updateStatsCount = () => {
