@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.0.2
+// @version      3.0.4
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -259,6 +259,18 @@
         .mam-btn-danger { background: #d32f2f; color: #fff; border-color: #b71c1c; }
         .mam-btn-danger:hover { background: #b71c1c; }
 
+        /* Hover Utilities to bypass inline CSP violations */
+        .mam-hover-scale { transition: transform 0.2s; }
+        .mam-hover-scale:hover { transform: scale(1.15); }
+        .mam-hover-opacity { opacity: 0.5; transition: opacity 0.2s; }
+        .mam-hover-opacity:hover { opacity: 1; }
+        .mam-hover-underline { text-decoration: none; }
+        .mam-hover-underline:hover { text-decoration: underline; }
+
+        /* Verification Helper */
+        .mam-verify-btn { display: inline-flex; align-items: center; justify-content: center; }
+        .mam-verify-btn img { filter: var(--mam-shadow-emoji); }
+
         /* UI Position Overrides */
         #mam-gift-panel.pos-top-left { top: 15px; left: calc(1% + 15px); bottom: auto; right: auto; }
         #mam-gift-panel.pos-top-right { top: 15px; right: calc(1% + 15px); bottom: auto; left: auto; }
@@ -375,7 +387,9 @@
         crown:    GM_getResourceURL('iconCrown'),
         slow:     GM_getResourceURL('iconSlow'),
         error:    GM_getResourceURL('iconError'),
-        check:    GM_getResourceURL('iconCheck')
+        check:    GM_getResourceURL('iconCheck'),
+        search:   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235EB9FF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E",
+        hidden:   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23bbaa77' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22'/%3E%3C/svg%3E"
     };
 
     const logIcon = (name, size = 11) => `<img src="${icons[name]}" style="width: ${size}px; height: ${size}px; vertical-align: text-bottom; margin-right: 4px; filter: drop-shadow(1px 1px 0px rgba(0,0,0,0.5));">`;
@@ -385,9 +399,9 @@
 
         <div class="mam-header">
             <h3 class="mam-title">
-                <span class="mam-title-icon mam-emoji" id="btn-about-title" title="About" onmouseover="this.querySelector('img').src='${icons.trap}'; this.style.transform='scale(1.15)';" onmouseout="this.querySelector('img').src='${icons.main}'; this.style.transform='scale(1)';"><img src="${icons.main}" style="width: 20px; height: 20px; vertical-align: bottom;"></span>GiftMAM
-                <a href="/millionaires/donate.php" target="_blank" id="btn-vault-alert" class="mam-emoji" title="Vault Reminder (Click to donate)" style="display: none; margin-left: 8px; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform='scale(1)'"><img src="${icons.vault}" style="width: 16px; height: 16px; vertical-align: middle;"></a>
-                <a href="/play_lotto.php" target="_blank" id="btn-lotto-alert" class="mam-emoji" title="Lotto Reminder (Click to enter)" style="display: none; margin-left: 4px; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform='scale(1)'"><img src="${icons.lotto}" style="width: 16px; height: 16px; vertical-align: middle;"></a>
+                <span class="mam-title-icon mam-emoji mam-hover-scale" id="btn-about-title" title="About"><img src="${icons.main}" style="width: 20px; height: 20px; vertical-align: bottom;"></span>GiftMAM
+                <a href="/millionaires/donate.php" target="_blank" id="btn-vault-alert" class="mam-emoji mam-hover-scale" title="Vault Reminder (Click to donate)" style="display: none; margin-left: 8px;"><img src="${icons.vault}" style="width: 16px; height: 16px; vertical-align: middle;"></a>
+                <a href="/play_lotto.php" target="_blank" id="btn-lotto-alert" class="mam-emoji mam-hover-scale" title="Lotto Reminder (Click to enter)" style="display: none; margin-left: 4px;"><img src="${icons.lotto}" style="width: 16px; height: 16px; vertical-align: middle;"></a>
             </h3>
             <div class="mam-header-controls" style="display: flex; align-items: center;">
                 <button id="btn-settings" class="mam-emoji" title="Settings"><img src="${icons.settings}" style="width: 18px; height: 18px; vertical-align: middle;"></button>
@@ -403,7 +417,10 @@
         <div class="mam-view" id="mam-view-settings">
             <div class="mam-settings-container">
 
-                <div class="mam-section-header"><div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.gift}" style="width: 14px; height: 14px; vertical-align: middle;"></span> Gifting</div></div>
+                <div class="mam-section-header">
+                    <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.gift}" style="width: 14px; height: 14px; vertical-align: middle;"></span> Gifting</div>
+                    <div id="mam-ui-daily-gifts" style="color: var(--mam-text); font-weight: normal; font-size: 10px; margin-right: 4px; text-transform: none;">Daily Gifts: 0</div>
+                </div>
                 <div class="mam-setting-row">
                     <label title="Accepts 5-1000 or 'Max'">Default Gift Amount:</label>
                     <input type="text" id="mam-cfg-amount" placeholder="100" maxlength="6">
@@ -472,7 +489,7 @@
                 <div class="mam-setting-row">
                     <label>Hide News:</label>
                     <div style="display: flex; gap: 6px; align-items: center;">
-                        <button id="btn-reset-news" class="mam-emoji" title="Reset Dismissed News" style="background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; opacity: 0.5; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'"><img src="${icons.reset}" style="width: 18px; height: 18px;"></button>
+                        <button id="btn-reset-news" class="mam-emoji mam-hover-opacity" title="Reset Dismissed News" style="background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center;"><img src="${icons.reset}" style="width: 18px; height: 18px;"></button>
                         <div class="mam-segment-grid" id="mam-cfg-hide-news" style="width: 90px;">
                             <div class="mam-segment" data-val="Off">Off</div>
                             <div class="mam-segment" data-val="Click">Click</div>
@@ -483,6 +500,14 @@
                 <div class="mam-setting-row">
                     <label>Compact Layout:</label>
                     <label class="mam-toggle"><input type="checkbox" id="mam-cfg-compact"><span class="mam-slider"></span></label>
+                </div>
+                <div class="mam-setting-row">
+                    <label>Support Links Layout:</label>
+                    <div class="mam-segment-grid" id="mam-cfg-support-links" style="width: 110px;">
+                        <div class="mam-segment" data-val="Off">Off</div>
+                        <div class="mam-segment" data-val="Blend">Blend</div>
+                        <div class="mam-segment" data-val="Hide">Hide</div>
+                    </div>
                 </div>
 
                 <div class="mam-section-header"><div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.data}" style="width: 16px; height: 16px; vertical-align: middle;"></span> Data</div></div>
@@ -525,16 +550,16 @@
 
                 <div style="display: flex; flex-direction: column; gap: 8px; margin: 8px 0;">
                     <div style="display: flex; justify-content: center; gap: 12px;">
-                        <a href="/newUsers.php" style="color: #5EB9FF; text-decoration: none; font-weight: bold;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">New Users</a>
+                        <a href="/newUsers.php" class="mam-hover-underline" style="color: #5EB9FF; font-weight: bold;">New Users</a>
                         <span style="color: var(--mam-border);">|</span>
-                        <a href="/millionaires/donate.php" style="color: #5EB9FF; text-decoration: none; font-weight: bold;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Vault</a>
+                        <a href="/millionaires/donate.php" class="mam-hover-underline" style="color: #5EB9FF; font-weight: bold;">Vault</a>
                         <span style="color: var(--mam-border);">|</span>
-                        <a href="/play_lotto.php" style="color: #5EB9FF; text-decoration: none; font-weight: bold;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Lotto</a>
+                        <a href="/play_lotto.php" class="mam-hover-underline" style="color: #5EB9FF; font-weight: bold;">Lotto</a>
                     </div>
                     <div style="display: flex; justify-content: center; gap: 12px;">
-                        <a href="https://www.myanonamouse.net/f/t/92053/p/p1106541" target="_blank" style="color: #5EB9FF; text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Forum Post</a>
+                        <a href="https://www.myanonamouse.net/f/t/92053/p/p1106541" target="_blank" class="mam-hover-underline" style="color: #5EB9FF;">Forum Post</a>
                         <span style="color: var(--mam-border);">|</span>
-                        <a href="https://github.com/Photaz/GiftMAM" target="_blank" style="color: #5EB9FF; text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">GitHub</a>
+                        <a href="https://github.com/Photaz/GiftMAM" target="_blank" class="mam-hover-underline" style="color: #5EB9FF;">GitHub</a>
                     </div>
                 </div>
 
@@ -575,6 +600,60 @@
     // 3. CORE SYSTEMS, STATE & CONCURRENCY
     // ==========================================
 
+    const Thread = {
+        tasks: new Set(),
+        timerId: null,
+        init() {
+            // Replaced Blob Worker with a recursive self-adjusting timeout to bypass CSP restrictions.
+            // When backgrounded, browsers throttle this to ~1000ms, which is still perfectly acceptable
+            // for our absolute delta checks.
+            const tick = () => {
+                const now = Date.now();
+                for (const task of this.tasks) {
+                    if (now >= task.target) {
+                        if (!task.recurring) this.tasks.delete(task);
+                        else task.target = now + task.interval;
+                        task.cb();
+                    }
+                }
+                this.timerId = setTimeout(tick, 250);
+            };
+            tick();
+        },
+        sleep(ms) {
+            return new Promise(resolve => {
+                this.tasks.add({ target: Date.now() + ms, cb: resolve, recurring: false });
+            });
+        },
+        setInterval(cb, ms) {
+            const task = { target: Date.now() + ms, interval: ms, cb, recurring: true };
+            this.tasks.add(task);
+            return task;
+        },
+        clearInterval(task) {
+            if (task) this.tasks.delete(task);
+        }
+    };
+
+    const WakeLock = {
+        screenLock: null,
+
+        async acquire() {
+            if ('wakeLock' in navigator) {
+                try {
+                    this.screenLock = await navigator.wakeLock.request('screen');
+                } catch (err) { }
+            }
+        },
+
+        release() {
+            if (this.screenLock) {
+                this.screenLock.release();
+                this.screenLock = null;
+            }
+        }
+    };
+
     // Centralized Memory and Sync Layout
     const StateManager = {
         state: {
@@ -582,6 +661,7 @@
             progress: 0,
             isLeader: false,
             leaderTabId: null,
+            lastLeaderHeartbeat: 0,
             currentBP: null,
             config: {
                 giftAmount: '100',
@@ -596,6 +676,7 @@
                 autoMinimize: [],
                 hideNews: 'Off',
                 compactLayout: false,
+                supportLinks: 'Off',
                 shoutboxGifting: true,
                 forumGifting: true
             }
@@ -647,6 +728,7 @@
             }
             this.state.config.hideNews = GM_getValue('hideNews', 'Off');
             this.state.config.compactLayout = GM_getValue('compactLayout', false);
+            this.state.config.supportLinks = GM_getValue('supportLinks', 'Off');
 
             // Scrape and initialize BP from native data attribute
             const domBP = document.getElementById('tmBP');
@@ -674,6 +756,19 @@
 
             // Ping to check if a leader already exists
             this.broadcast('PING_LEADER', { from: this.myTabId });
+
+            // Hardened Concurrency Monitor (Runs on the unthrottled Thread clock)
+            Thread.setInterval(() => {
+                if (this.state.isLeader) {
+                    this.broadcast('LEADER_HEARTBEAT');
+                } else if (this.state.leaderTabId) {
+                    if (Date.now() - this.state.lastLeaderHeartbeat > 15000) {
+                        Logger.log("Leader tab lost. Releasing lock.");
+                        this.state.leaderTabId = null;
+                        this.setExecutionUI('IDLE');
+                    }
+                }
+            }, 5000);
         },
 
         updateConfig(key, value) {
@@ -697,7 +792,18 @@
                 case 'LEADER_CLAIM':
                     this.state.isLeader = false;
                     this.state.leaderTabId = msg.tabId;
+                    this.state.lastLeaderHeartbeat = Date.now();
                     this.setExecutionUI(msg.payload.running ? 'LOCKED' : 'IDLE');
+                    break;
+                case 'LEADER_HEARTBEAT':
+                    if (this.state.leaderTabId === msg.tabId) {
+                        this.state.lastLeaderHeartbeat = Date.now();
+                    } else if (!this.state.isLeader) {
+                        // Edge case: A new leader took over while we were suspended
+                        this.state.leaderTabId = msg.tabId;
+                        this.state.lastLeaderHeartbeat = Date.now();
+                        this.setExecutionUI('LOCKED');
+                    }
                     break;
                 case 'LEADER_RELEASE':
                     if (this.state.leaderTabId === msg.tabId) {
@@ -903,16 +1009,26 @@
     // Prune stale records on initialization
     Database.prune();
 
+    const ThreadDB = {
+        key: 'mam_57795_cache',
+        get() { try { return JSON.parse(GM_getValue(this.key, '{}')); } catch(e) { return {}; } },
+        save(data) { GM_setValue(this.key, JSON.stringify(data)); },
+        markVerified(pid) { const d = this.get(); if (!d[pid]) d[pid] = {}; d[pid].v = 1; this.save(d); },
+        markGifted(pid) { const d = this.get(); if (!d[pid]) d[pid] = {}; d[pid].g = 1; this.save(d); },
+        isVerified(pid) { return !!this.get()[pid]?.v; },
+        isGifted(pid) { return !!this.get()[pid]?.g; }
+    };
+
     const DailyTracker = {
         getKey() { return 'mam_daily_gifts_tracker'; },
         get() {
-            let data = { date: 0, count: 0 };
-            try { data = JSON.parse(GM_getValue(this.getKey(), '{"date":0,"count":0}')); } catch(e) {}
+            let data = { date: 0, count: 0, capped: false };
+            try { data = JSON.parse(GM_getValue(this.getKey(), '{"date":0,"count":0,"capped":false}')); } catch(e) {}
             const d = new Date();
             d.setUTCHours(0, 0, 0, 0);
             const midnight = d.getTime();
             if (data.date !== midnight) {
-                return { date: midnight, count: 0 };
+                return { date: midnight, count: 0, capped: false };
             }
             return data;
         },
@@ -920,14 +1036,24 @@
             const data = this.get();
             data.count += 1;
             GM_setValue(this.getKey(), JSON.stringify(data));
+            this.updateUI();
         },
-        setMax() {
+        setCapReached() {
             const data = this.get();
-            data.count = 100;
+            data.capped = true;
             GM_setValue(this.getKey(), JSON.stringify(data));
+            this.updateUI();
         },
         canGift() {
-            return this.get().count < 100;
+            return !this.get().capped;
+        },
+        updateUI() {
+            const el = document.getElementById('mam-ui-daily-gifts');
+            if (el) {
+                const data = this.get();
+                el.textContent = `Daily Gifts: ${data.count}${data.capped ? ' (Max)' : ''}`;
+                el.style.color = data.capped ? '#EF5350' : 'var(--mam-text)';
+            }
         }
     };
 
@@ -940,28 +1066,25 @@
 
         async loadAndMerge(newTargets, isRefresh = false) {
             const key = this.getStorageKey();
-            const isNewUsersPage = window.location.pathname === '/newUsers.php';
-
-            let cached = [];
-            if (isNewUsersPage) {
-                try { cached = JSON.parse(GM_getValue(key, '[]')); } catch(e) {}
-            }
-
-            let combined = isNewUsersPage ? [...cached, ...newTargets] : [...newTargets];
+            const previousCount = this.users.length;
 
             const uniqueMap = new Map();
-            combined.forEach(u => {
+            // Map naturally maintains DOM insertion order, ensuring top-to-bottom processing
+            newTargets.forEach(u => {
                 if (u && u.id) uniqueMap.set(u.id.toString(), u);
             });
 
             let uniqueUsers = Array.from(uniqueMap.values());
+
+            // Filter out users already in the GiftMAM database
             this.users = uniqueUsers.filter(u => !Database.has(u.id, u.name));
 
+            // Overwrite cache entirely with the live DOM state, dropping stale/missed users
             GM_setValue(key, JSON.stringify(this.users));
             updateStatsCount();
 
             if (isRefresh) {
-                const added = this.users.length - cached.length;
+                const added = this.users.length - previousCount;
                 if (added <= 0) {
                     Logger.log("No new mice found.");
                 } else if (added === 1) {
@@ -1113,11 +1236,10 @@
             const elapsed = now - this.lastApiCall;
             if (elapsed < minGapMs && this.lastApiCall !== 0) {
                 const waitTime = minGapMs - elapsed;
-                let slept = 0;
-                while (slept < waitTime) {
+                const targetTime = Date.now() + waitTime;
+                while (Date.now() < targetTime) {
                     if (context === 'batch' && !StateManager.state.isRunning) return false;
-                    await new Promise(resolve => setTimeout(resolve, 200));
-                    slept += 200;
+                    await Thread.sleep(250);
                 }
             }
             this.lastApiCall = Date.now();
@@ -1131,6 +1253,8 @@
 
         resetUI() {
             StateManager.state.isRunning = false;
+            StateManager.state.isLeader = false;
+            StateManager.state.leaderTabId = null;
             StateManager.state.progress = 0;
             StateManager.updateProgressBar(0);
             const btn = document.getElementById('btn-run');
@@ -1138,6 +1262,7 @@
                 btn.classList.remove('stopping');
             }
             StateManager.broadcast('LEADER_RELEASE');
+            WakeLock.release();
         },
 
         stop() {
@@ -1146,34 +1271,28 @@
             Logger.log(`Stopping...`);
         },
 
-        initHeartbeat() {
-            if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer);
+        async heartbeatLoop() {
+            this.heartbeatActive = true;
+            while (this.heartbeatActive) {
+                const elapsed = Date.now() - this.lastHeartbeat;
+                const targetInterval = 15 * 60 * 1000;
 
-            this.lastHeartbeat = Date.now();
-            const targetInterval = 15 * 60 * 1000;
-
-            const checkHeartbeat = () => {
-                const buyAmt = StateManager.state.config.buyAmount;
-                const renewVip = StateManager.state.config.renewVip;
-                const timeSinceLastHeartbeat = Date.now() - this.lastHeartbeat;
-
-                if (timeSinceLastHeartbeat >= targetInterval) {
-                    if ((buyAmt !== 'Off' || renewVip) && !StateManager.state.isRunning) {
-                        this.triggerHeartbeat().finally(() => {
-                            this.lastHeartbeat = Date.now();
-                            this.heartbeatTimer = setTimeout(checkHeartbeat, targetInterval);
-                        });
-                        return;
+                if (elapsed >= targetInterval) {
+                    if ((StateManager.state.config.buyAmount !== 'Off' || StateManager.state.config.renewVip) && !StateManager.state.isRunning) {
+                        await this.triggerHeartbeat();
+                        this.lastHeartbeat = Date.now();
                     } else {
                         this.lastHeartbeat = Date.now();
                     }
                 }
+                // Continually check delta every 5 seconds via unthrottled worker
+                await Thread.sleep(5000);
+            }
+        },
 
-                const delay = Math.max(5000, targetInterval - timeSinceLastHeartbeat);
-                this.heartbeatTimer = setTimeout(checkHeartbeat, delay);
-            };
-
-            this.heartbeatTimer = setTimeout(checkHeartbeat, targetInterval);
+        initHeartbeat() {
+            this.lastHeartbeat = Date.now();
+            if (!this.heartbeatActive) this.heartbeatLoop();
         },
 
         async processStoreQueue(vipUntilStr = null, context = 'background') {
@@ -1200,12 +1319,13 @@
                 const minAllowedPurchaseMs = 7 * 24 * 60 * 60 * 1000;
 
                 if (remainingTimeMs <= (maxVipMs - minAllowedPurchaseMs) && currentBP >= (StateManager.state.config.minReserve + 1250)) {
+                    const gap = context === 'batch' ? 15000 : 2000;
+                    const passed = await this.enforceRateLimit(gap, context);
+                    if (!passed) return false;
+                    if (context === 'batch' && !StateManager.state.isRunning) return false;
+
                     if (await attemptPurchaseLock()) {
                         Logger.log("Renewing VIP...");
-                        const passed = await this.enforceRateLimit(15000, context);
-                        if (!passed) return false;
-                        if (context === 'batch' && !StateManager.state.isRunning) return false;
-
                         const res = await fetch('/json/bonusBuy.php?spendtype=VIP&duration=max');
                         this.lastApiCall = Date.now();
 
@@ -1228,12 +1348,13 @@
                 const parsedAmount = buyAmount === 'Max' ? 'Max Affordable ' : parseInt(buyAmount, 10);
                 const logLabel = buyAmount === 'Max' ? 'Max' : `${parsedAmount}GB`;
 
+                const gap = context === 'batch' ? 15000 : 2000;
+                const passed = await this.enforceRateLimit(gap, context);
+                if (!passed) return false;
+                if (context === 'batch' && !StateManager.state.isRunning) return false;
+
                 if (await attemptPurchaseLock()) {
                     Logger.log(`Buying ${logLabel} upload...`);
-                    const passed = await this.enforceRateLimit(15000, context);
-                    if (!passed) return false;
-                    if (context === 'batch' && !StateManager.state.isRunning) return false;
-
                     const res = await fetch(`/json/bonusBuy.php?spendtype=upload&amount=${encodeURIComponent(parsedAmount)}`);
                     this.lastApiCall = Date.now();
 
@@ -1280,7 +1401,7 @@
             }
 
             if (!DailyTracker.canGift()) {
-                Logger.log(`${logIcon('stop', 13)} Daily limit (100) reached.`);
+                Logger.log(`${logIcon('stop', 13)} Server daily limit reached.`);
                 return;
             }
 
@@ -1303,6 +1424,7 @@
             StateManager.state.isRunning = true;
             StateManager.state.isLeader = true;
             StateManager.broadcast('LEADER_CLAIM', { running: true });
+            WakeLock.acquire();
 
             // Ensure no duplicate IDs exist in the active queue array before running
             const uniqueTargets = Array.from(new Map(targets.map(u => [u.id, u])).values());
@@ -1374,23 +1496,22 @@
                         const errStr = (data.error || "").toLowerCase();
                         if (errStr.includes("rate limit")) {
                             Logger.log(`${logIcon('slow')} Pausing 15 seconds...`);
-                            let slept = 0;
-                            while (slept < 15000) {
+                            const target = Date.now() + 15000;
+                            while (Date.now() < target) {
                                 if (!StateManager.state.isRunning) {
                                     abortReason = "stopped";
                                     break;
                                 }
-                                await new Promise(r => setTimeout(r, 200));
-                                slept += 200;
+                                await Thread.sleep(250);
                             }
                             if (abortReason === "stopped") break;
                             throw new Error(data.error);
                         } else if (errStr.includes("insufficient points")) {
                             abortReason = `${logIcon('stop')} Insufficient BP. Stopping.`;
                             break;
-                        } else if (errStr.includes("100 gifts today") || errStr.includes("max gifts today") || errStr.includes("resume tomorrow")) {
-                            DailyTracker.setMax();
-                            abortReason = `${logIcon('stop', 13)} Daily gift limit reached.`;
+                        } else if (errStr.includes("100 gifts today") || errStr.includes("max gifts today") || errStr.includes("resume tomorrow") || errStr.includes("token")) {
+                            DailyTracker.setCapReached();
+                            abortReason = `${logIcon('stop', 13)} Server daily limit reached.`;
                             break;
                         } else if (errStr.includes("daily cap") || errStr.includes("invalid") || errStr.includes("disabled") || errStr.includes("not found")) {
                             // Quiet Adoption (Skip)
@@ -1465,6 +1586,7 @@
 
     const PageTweaks = {
         styleEl: null,
+        supportStyleEl: null,
         tooltipBound: false,
 
         init() {
@@ -1472,12 +1594,55 @@
             this.applyHideNews(StateManager.state.config.hideNews);
             this.applyPosition(StateManager.state.config.uiPosition);
             this.applyAutoMinimize(StateManager.state.config.autoMinimize);
+            this.applySupportLinks(StateManager.state.config.supportLinks);
 
             window.addEventListener('mam-config-updated', (e) => {
                 if (e.detail.key === 'compactLayout') this.applyCompactLayout(e.detail.value);
                 if (e.detail.key === 'hideNews') this.applyHideNews(e.detail.value);
                 if (e.detail.key === 'uiPosition') this.applyPosition(e.detail.value);
+                if (e.detail.key === 'supportLinks') this.applySupportLinks(e.detail.value);
             });
+        },
+
+        applySupportLinks(mode) {
+            if (!this.supportStyleEl) {
+                this.supportStyleEl = document.createElement('style');
+                document.head.appendChild(this.supportStyleEl);
+            }
+
+            const donLink = document.querySelector('.mmDonBox > a');
+
+            if (mode === 'Off') {
+                this.supportStyleEl.textContent = '';
+                if (donLink) {
+                    donLink.style.backgroundColor = '#700';
+                    donLink.style.fontWeight = 'bold';
+                }
+                return;
+            }
+
+            let css = '';
+            if (mode === 'Blend') {
+                if (donLink) {
+                    // Stripping the inline style allows the native theme CSS to apply the standard dark menu background
+                    donLink.style.backgroundColor = '';
+                    donLink.style.fontWeight = '';
+                }
+                css = `
+                    .sbDonCrypto img { display: none !important; }
+                    .sbDonCrypto a::after { content: "Get A Seedbox"; }
+                    .sbDonCrypto a { padding: 0 10px !important; display: block !important; }
+                `;
+            } else if (mode === 'Hide') {
+                if (donLink) {
+                    donLink.style.backgroundColor = '#700';
+                    donLink.style.fontWeight = 'bold';
+                }
+                css = `
+                    .mmDonBox, .sbDonCrypto { display: none !important; }
+                `;
+            }
+            this.supportStyleEl.textContent = css;
         },
 
         applyAutoMinimize(configArr = []) {
@@ -1858,6 +2023,184 @@
     // 4. UI LOGIC & EVENT ROUTING
     // ==========================================
 
+    const ForumVerifier = {
+        init() {
+            if (!window.location.pathname.startsWith('/f/t/57795')) return;
+            this.evaluateState();
+            window.addEventListener('mam-config-updated', (e) => {
+                if (e.detail.key === 'forumGifting') this.evaluateState();
+            });
+        },
+        evaluateState() {
+            if (StateManager.state.config.forumGifting) {
+                this.injectButtons();
+            } else {
+                this.removeButtons();
+            }
+        },
+        removeButtons() {
+            document.querySelectorAll('.mam-verify-btn').forEach(btn => btn.remove());
+            // Optionally strip blue coloring if disabled
+            document.querySelectorAll('td.colhead[data-pid] a[href^="/u/"]').forEach(a => {
+                if (a.style.color === 'rgb(94, 185, 255)' || a.style.color === '#5EB9FF') {
+                    a.style.removeProperty('color');
+                    a.style.removeProperty('font-weight');
+                }
+            });
+        },
+        injectButtons() {
+            document.querySelectorAll('td[data-pid][align="right"]').forEach(td => {
+                const pid = td.dataset.pid;
+                const giftContainer = td.previousElementSibling?.querySelector('.mam-forum-gifting-container');
+                if (!giftContainer) return;
+
+                // Paint the author's username blue if already gifted
+                if (ThreadDB.isGifted(pid)) {
+                    const authorLink = td.closest('.coltable').querySelector('td.colhead[data-pid] a[href^="/u/"]');
+                    if (authorLink) {
+                        authorLink.style.setProperty('color', '#5EB9FF', 'important');
+                        authorLink.style.fontWeight = 'bold';
+                    }
+                }
+
+                if (giftContainer.querySelector('.mam-verify-btn')) return;
+
+                const verifyBtn = document.createElement('span');
+                verifyBtn.className = 'mam-emoji mam-verify-btn';
+
+                if (ThreadDB.isVerified(pid)) {
+                    this.setResult(verifyBtn, icons.check, "Passed (Cached)");
+                } else {
+                    verifyBtn.classList.add('mam-hover-scale');
+                    verifyBtn.innerHTML = `<img src="${icons.search}" style="width: 14px; height: 14px; display: block;">`;
+                    verifyBtn.title = "Verify 2nd/3rd Upload Rule (May 6, 2020)";
+                    verifyBtn.style.cssText = "cursor: pointer; display: flex; align-items: center;";
+                    verifyBtn.onclick = () => this.verifyPost(pid, verifyBtn);
+                }
+
+                giftContainer.appendChild(verifyBtn);
+            });
+        },
+
+        async verifyPost(pid, btn) {
+            btn.onclick = null; // Prevent multi-clicks
+            btn.classList.remove('mam-hover-scale');
+            btn.innerHTML = `<img src="${icons.slow}" style="width: 14px; height: 14px; display: block;">`;
+            btn.title = "Parsing and validating...";
+
+            const postTd = document.getElementById(`postID${pid}`);
+            const headerTd = document.querySelector(`td[data-pid="${pid}"]`);
+            const authorLink = headerTd ? headerTd.querySelector('a[href^="/u/"]') : null;
+
+            if (!postTd || !authorLink) {
+                this.setResult(btn, icons.error, "Failed to parse author or post body.");
+                return;
+            }
+
+            const authorUid = authorLink.getAttribute('href').split('/u/')[1];
+            const links = postTd.querySelectorAll('a[href*="/t/"]');
+            const ids = new Set();
+
+            links.forEach(a => {
+                const match = a.getAttribute('href').match(/\/t\/(\d+)/);
+                if (match) ids.add(match[1]);
+            });
+
+            if (ids.size < 3) {
+                this.setResult(btn, icons.error, `Found ${ids.size} unique links. Need at least 3.`);
+                return;
+            }
+
+            const validDates = [];
+            let hiddenCount = 0;
+            let passed = false;
+            const cutoff = new Date('2020/05/06').getTime();
+
+            for (const id of ids) {
+                try {
+                    await Engine.enforceRateLimit(2000, 'background');
+
+                    const formData = new URLSearchParams();
+                    formData.append('tor[id]', id.toString());
+                    formData.append('tor[searchType]', 'all');
+                    formData.append('tor[searchIn]', 'torrents');
+
+                    const res = await fetch('/tor/js/loadSearchJSONbasic.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                            'Accept': 'application/json, text/javascript, */*; q=0.01'
+                        },
+                        body: formData
+                    });
+
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json.data && json.data.length > 0) {
+                            const tor = json.data[0];
+
+                            // Safeguard: Ensure backend actually searched our target ID
+                            if (tor.id.toString() !== id.toString()) {
+                                Logger.log(`API query anomaly for ID ${id}. Received ${tor.id}`);
+                                continue;
+                            }
+
+                            if (tor.ownership === "[]") {
+                                hiddenCount++;
+                                continue;
+                            }
+
+                            let ownerId = null;
+                            try {
+                                const ownershipArray = JSON.parse(tor.ownership);
+                                ownerId = ownershipArray[0];
+                            } catch(e) {}
+
+                            if (ownerId && ownerId.toString() === authorUid.toString()) {
+                                // Parse YYYY-MM-DD HH:MM:SS safely
+                                validDates.push(new Date(tor.added.replace(/-/g, '/')).getTime());
+                                validDates.sort((a, b) => a - b);
+
+                                // Check for a passing triplet immediately after parsing a new valid date
+                                if (validDates.length >= 3) {
+                                    for (let i = 0; i <= validDates.length - 3; i++) {
+                                        if (validDates[i + 1] >= cutoff && validDates[i + 2] >= cutoff) {
+                                            passed = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    Logger.log(`API Error on ID ${id}: ${e.message}`);
+                }
+
+                if (passed) break; // Early exit! We found a passing triplet, no need to query more links.
+            }
+
+            if (!passed && validDates.length < 3) {
+                if ((validDates.length + hiddenCount) >= 3) {
+                    this.setResult(btn, icons.hidden, "User uploads are hidden. Manual verification required.");
+                } else {
+                    this.setResult(btn, icons.error, `Only ${validDates.length} links verified as owned by user. Need 3.`);
+                }
+                return;
+            }
+
+            if (passed) ThreadDB.markVerified(pid);
+
+            this.setResult(btn, passed ? icons.check : icons.error, passed ? "Passed: 2nd and 3rd uploads are >= 2020-05-06" : "Failed: Eligible uploads pre-date 2020-05-06");
+        },
+
+        setResult(btn, iconUrl, msg) {
+            btn.innerHTML = `<img src="${iconUrl}" style="width: 14px; height: 14px; display: block;">`;
+            btn.title = msg;
+            btn.style.cursor = 'default';
+        }
+    };
+
     const ForumManager = {
         init() {
             if (window.location.pathname.startsWith('/f/t/')) {
@@ -1891,6 +2234,8 @@
                 if (img && img.alt && img.alt.startsWith("PM ")) {
                     username = img.alt.substring(3);
                 }
+
+                const postPid = pmLink.closest('tr').querySelector('td[data-pid]')?.dataset.pid;
 
                 pmLink.style.display = 'inline-flex';
                 pmLink.style.alignItems = 'center';
@@ -1926,12 +2271,12 @@
                                 const data = await resp.json();
                                 Engine.lastApiCall = Date.now();
                                 if (data.success) {
-                                    Logger.log(`${logIcon('check', 13)} ${numAmount} BP to ${username}`);
-                                    DailyTracker.increment();
-                                    if (data.seedbonus !== undefined) StateManager.updateBP(parseInt(data.seedbonus, 10));
-                                } else {
+                                        Logger.log(`${logIcon('check', 13)} ${numAmount} BP to ${username}`);
+                                        DailyTracker.increment();
+                                        if (data.seedbonus !== undefined) StateManager.updateBP(parseInt(data.seedbonus, 10));
+                                    } else {
                                     let errStr = data.error || "";
-                                    if (errStr.toLowerCase().includes("100 gifts today")) DailyTracker.setMax();
+                                    if (errStr.toLowerCase().includes("100 gifts") || errStr.toLowerCase().includes("resume tomorrow") || errStr.toLowerCase().includes("max gifts") || errStr.toLowerCase().includes("token")) DailyTracker.setCapReached();
                                     Logger.log(`${logIcon('error', 13)} ${username}: ${errStr}`);
                                 }
                             } catch (err) {
@@ -1954,24 +2299,27 @@
                 wedgeBtn.onmouseout = () => wedgeBtn.style.transform = 'scale(1)';
                 wedgeBtn.onclick = async (e) => {
                     e.preventDefault();
-                    if (!DailyTracker.canGift()) {
-                        Logger.log(`${logIcon('stop', 13)} Daily gift limit reached.`);
-                        return;
-                    }
                     if (window.confirm(`Send 1 Freeleech Wedge to ${username}?`)) {
                         try {
                             await Engine.enforceRateLimit(2000);
                             const resp = await fetch(`/json/bonusBuy.php?spendtype=sendWedge&giftTo=${uid}`);
                             const data = await resp.json();
                             Engine.lastApiCall = Date.now();
+
                             if (data.success) {
                                 Logger.log(`${logIcon('check', 13)} Wedge to ${username}`);
-                                DailyTracker.increment();
                                 if (data.seedbonus !== undefined) StateManager.updateBP(parseInt(data.seedbonus, 10));
+
+                                if (window.location.pathname.startsWith('/f/t/57795') && postPid) {
+                                    ThreadDB.markGifted(postPid);
+                                    const authorLink = pmLink.closest('.coltable').querySelector('td.colhead[data-pid] a[href^="/u/"]');
+                                    if (authorLink) {
+                                        authorLink.style.setProperty('color', '#5EB9FF', 'important');
+                                        authorLink.style.fontWeight = 'bold';
+                                    }
+                                }
                             } else {
-                                let errStr = data.error || "";
-                                if (errStr.toLowerCase().includes("100 gifts today")) DailyTracker.setMax();
-                                Logger.log(`${logIcon('error', 13)} ${username}: ${errStr}`);
+                                Logger.log(`${logIcon('error', 13)} ${username}: ${data.error || "Unknown error"}`);
                             }
                         } catch (err) {
                             Logger.log(`${logIcon('error', 13)} Network error sending wedge.`);
@@ -1986,13 +2334,16 @@
     };
 
     // Initialize Subsystems (State MUST load before Tweaks)
+    Thread.init();
     StateManager.init();
     PageTweaks.init();
     DailiesManager.init();
     ShoutboxManager.init();
     ForumManager.init();
+    ForumVerifier.init();
     Engine.initHeartbeat();
     AuditLogger.render();
+    DailyTracker.updateUI();
 
     // Check store queue on F5/Page Load if condition is met
     if ((StateManager.state.config.buyAmount !== 'Off' || StateManager.state.config.renewVip) && StateManager.state.currentBP !== null && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
@@ -2088,6 +2439,7 @@
     bindInput('mam-cfg-lotto-remind', 'lottoReminder', 'checkbox');
     bindSegment('mam-cfg-hide-news', 'hideNews');
     bindInput('mam-cfg-compact', 'compactLayout', 'checkbox');
+    bindSegment('mam-cfg-support-links', 'supportLinks');
     bindSegment('mam-cfg-position', 'uiPosition');
 
     const bindMultiSegment = (id, key) => {
@@ -2240,11 +2592,16 @@
         switchView(isActive ? 'main' : 'settings');
     });
 
-    document.getElementById('btn-about-title').addEventListener('click', (e) => {
-        e.stopPropagation();
-        const isCurrentlyAbout = views.about.classList.contains('active') || views.changelog.classList.contains('active');
-        switchView(isCurrentlyAbout ? 'main' : 'about');
-    });
+    const titleIconBtn = document.getElementById('btn-about-title');
+    if (titleIconBtn) {
+        titleIconBtn.addEventListener('mouseenter', function() { this.querySelector('img').src = icons.trap; });
+        titleIconBtn.addEventListener('mouseleave', function() { this.querySelector('img').src = icons.main; });
+        titleIconBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isCurrentlyAbout = views.about.classList.contains('active') || views.changelog.classList.contains('active');
+            switchView(isCurrentlyAbout ? 'main' : 'about');
+        });
+    }
 
     // Bind Audit Buttons
     document.getElementById('btn-open-audit').addEventListener('click', (e) => {
