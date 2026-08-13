@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.0.4
+// @version      3.0.5
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -141,14 +141,13 @@
 
         /* --- VIEWS & LOG --- */
         .mam-view {
-            height: 140px; overflow: hidden;
+            height: 140px; overflow-y: auto; overflow-x: hidden;
             background: var(--mam-bg-sec);
             display: none;
         }
         .mam-view.active { display: block; }
-        #mam-view-settings { overflow-y: auto; }
 
-        #mam-view-main { position: relative; }
+        #mam-view-main { position: relative; overflow: hidden; }
         .mam-log-container {
             padding: 8px; font-family: monospace; font-size: 11px;
             color: var(--mam-text-muted);
@@ -156,8 +155,15 @@
         }
         .mam-log-container > div { margin-bottom: 2px; }
 
-        .mam-refresh-btn, .mam-exit-btn {
+        .mam-refresh-btn {
             position: absolute; top: 6px; right: 8px;
+            background: none; border: none; cursor: pointer;
+            padding: 0 4px; color: var(--mam-text);
+            opacity: 0.7; display: flex; align-items: center; justify-content: center;
+            transition: opacity 0.2s;
+            filter: var(--mam-shadow-emoji);
+        }
+        .mam-exit-btn {
             background: none; border: none; cursor: pointer;
             padding: 0 4px; color: var(--mam-text);
             opacity: 0.7; display: flex; align-items: center; justify-content: center;
@@ -168,8 +174,15 @@
         .mam-refresh-btn img { width: 14px; height: 14px; }
 
         /* --- SETTINGS ROW STABILITY --- */
-        .mam-settings-container, .mam-about-container { padding: 10px; font-size: 12px; }
-        .mam-setting-row { display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center; }
+        .mam-settings-container, .mam-about-container {
+            padding: 4px 10px; font-size: 12px;
+            display: flex; flex-direction: column; gap: 0;
+            box-sizing: border-box; height: 100%;
+        }
+        .mam-setting-row {
+            display: flex; justify-content: space-between; align-items: center;
+            height: 27px; flex-shrink: 0; margin: 0;
+        }
         .mam-setting-row label { color: var(--mam-text); }
         .mam-settings-container strong, .mam-about-container h4 { color: var(--mam-text); }
 
@@ -225,10 +238,12 @@
         /* Settings Headers & Buttons */
         .mam-section-header {
             display: flex; justify-content: space-between; align-items: center;
-            margin: 12px 0 6px 0; border-bottom: 1px solid var(--mam-border);
+            margin: 0; border-bottom: 1px solid var(--mam-border);
             padding-bottom: 2px; color: var(--mam-text); font-weight: bold; font-size: 11px; text-transform: uppercase;
+            height: 24px; flex-shrink: 0; box-sizing: border-box;
         }
         .mam-section-header-left { display: flex; align-items: center; gap: 4px; }
+        .mam-section-header-right { display: flex; align-items: center; gap: 8px; }
 
         .mam-audit-btn {
             background: none; border: none; cursor: pointer; padding: 0; margin: 0;
@@ -415,11 +430,25 @@
         </div>
 
         <div class="mam-view" id="mam-view-settings">
-            <div class="mam-settings-container">
+            <div class="mam-settings-container" style="justify-content: center; gap: 4px; padding: 12px 10px;">
+                <button class="mam-btn mam-menu-btn" data-target="setGifting" style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; height: 26px;"><span class="mam-emoji" style="display:flex;"><img src="${icons.gift}" style="width: 14px; height: 14px;"></span> Gifting</button>
+                <button class="mam-btn mam-menu-btn" data-target="setApi" style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; height: 26px;"><span class="mam-emoji" style="display:flex;"><img src="${icons.api}" style="width: 16px; height: 16px;"></span> Store & API</button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="mam-btn mam-menu-btn" data-target="setUiWidget" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; height: 26px;"><span class="mam-emoji" style="display:flex;"><img src="${icons.ui}" style="width: 14px; height: 14px;"></span> Panel UI</button>
+                    <button class="mam-btn mam-menu-btn" data-target="setUiSite" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; height: 26px;"><span class="mam-emoji" style="display:flex;"><img src="${icons.ui}" style="width: 14px; height: 14px;"></span> Site UI</button>
+                </div>
+                <button class="mam-btn mam-menu-btn" data-target="setData" style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; height: 26px;"><span class="mam-emoji" style="display:flex;"><img src="${icons.data}" style="width: 16px; height: 16px;"></span> Data Management</button>
+            </div>
+        </div>
 
+        <div class="mam-view" id="mam-view-set-gifting">
+            <div class="mam-settings-container">
                 <div class="mam-section-header">
                     <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.gift}" style="width: 14px; height: 14px; vertical-align: middle;"></span> Gifting</div>
-                    <div id="mam-ui-daily-gifts" style="color: var(--mam-text); font-weight: normal; font-size: 10px; margin-right: 4px; text-transform: none;">Daily Gifts: 0</div>
+                    <div class="mam-section-header-right">
+                        <div id="mam-ui-daily-gifts" style="color: var(--mam-text); font-weight: normal; font-size: 10px; text-transform: none;">Daily Gifts: 0</div>
+                        <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+                    </div>
                 </div>
                 <div class="mam-setting-row">
                     <label title="Accepts 5-1000 or 'Max'">Default Gift Amount:</label>
@@ -430,17 +459,23 @@
                     <input type="number" id="mam-cfg-reserve" min="1000" max="999999">
                 </div>
                 <div class="mam-setting-row">
-                    <label>Shoutbox Gifting:</label>
-                    <label class="mam-toggle"><input type="checkbox" id="mam-cfg-shoutbox"><span class="mam-slider"></span></label>
+                    <label>Social Gifting:</label>
+                    <div class="mam-segment-grid" id="mam-cfg-social-gifting" style="width: 120px;">
+                        <div class="mam-segment" data-val="Shoutbox">Shoutbox</div>
+                        <div class="mam-segment" data-val="Forum">Forum</div>
+                    </div>
                 </div>
-                <div class="mam-setting-row">
-                    <label>Forum Gifting:</label>
-                    <label class="mam-toggle"><input type="checkbox" id="mam-cfg-forum"><span class="mam-slider"></span></label>
-                </div>
+            </div>
+        </div>
 
+        <div class="mam-view" id="mam-view-set-api">
+            <div class="mam-settings-container">
                 <div class="mam-section-header">
-                    <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.api}" style="width: 16px; height: 16px; vertical-align: middle;"></span> API</div>
-                    <button class="mam-audit-btn" id="btn-open-audit" title="View Audit Log"><img src="${icons.audit}" style="width: 14px; height: 14px;"></button>
+                    <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.api}" style="width: 16px; height: 16px; vertical-align: middle;"></span> Store & API</div>
+                    <div class="mam-section-header-right">
+                        <button class="mam-audit-btn" id="btn-open-audit" title="View Audit Log"><img src="${icons.audit}" style="width: 14px; height: 14px;"></button>
+                        <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+                    </div>
                 </div>
                 <div class="mam-setting-row">
                     <label>Buy Amount:</label>
@@ -456,19 +491,22 @@
                     <input type="number" id="mam-cfg-buy-when" min="1000" max="999999">
                 </div>
                 <div class="mam-setting-row">
-                    <label>Renew VIP:</label>
-                    <label class="mam-toggle"><input type="checkbox" id="mam-cfg-renew-vip"><span class="mam-slider"></span></label>
+                    <label>Automations:</label>
+                    <div class="mam-segment-grid" id="mam-cfg-store-automations" style="width: 120px;">
+                        <div class="mam-segment" data-val="VIP">VIP</div>
+                        <div class="mam-segment" data-val="Vault">Vault</div>
+                        <div class="mam-segment" data-val="Lotto">Lotto</div>
+                    </div>
                 </div>
-                <div class="mam-setting-row">
-                    <label>Vault Reminder:</label>
-                    <label class="mam-toggle"><input type="checkbox" id="mam-cfg-vault-remind"><span class="mam-slider"></span></label>
-                </div>
-                <div class="mam-setting-row">
-                    <label>Lotto Reminder:</label>
-                    <label class="mam-toggle"><input type="checkbox" id="mam-cfg-lotto-remind"><span class="mam-slider"></span></label>
-                </div>
+            </div>
+        </div>
 
-                <div class="mam-section-header"><div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.ui}" style="width: 14px; height: 14px; vertical-align: middle;"></span> UI</div></div>
+        <div class="mam-view" id="mam-view-set-ui-widget">
+            <div class="mam-settings-container">
+                <div class="mam-section-header">
+                    <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.ui}" style="width: 14px; height: 14px; vertical-align: middle;"></span> Panel UI</div>
+                    <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+                </div>
                 <div class="mam-setting-row">
                     <label>Position:</label>
                     <div class="mam-pos-grid" id="mam-cfg-position">
@@ -485,6 +523,15 @@
                         <div class="mam-segment" data-val="New">New</div>
                         <div class="mam-segment" data-val="Other">Other</div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mam-view" id="mam-view-set-ui-site">
+            <div class="mam-settings-container">
+                <div class="mam-section-header">
+                    <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.ui}" style="width: 14px; height: 14px; vertical-align: middle;"></span> Site UI</div>
+                    <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
                 </div>
                 <div class="mam-setting-row">
                     <label>Hide News:</label>
@@ -509,9 +556,16 @@
                         <div class="mam-segment" data-val="Hide">Hide</div>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <div class="mam-section-header"><div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.data}" style="width: 16px; height: 16px; vertical-align: middle;"></span> Data</div></div>
-                <div style="display: flex; gap: 6px; justify-content: space-between;">
+        <div class="mam-view" id="mam-view-set-data">
+            <div class="mam-settings-container">
+                <div class="mam-section-header">
+                    <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.data}" style="width: 16px; height: 16px; vertical-align: middle;"></span> Data</div>
+                    <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+                </div>
+                <div style="display: flex; gap: 6px; justify-content: space-between; margin-top: 4px;">
                     <button class="mam-btn" id="btn-export" style="flex: 1;">Export</button>
                     <button class="mam-btn" id="btn-import" style="flex: 1;">Import</button>
                     <button class="mam-btn mam-btn-danger" id="btn-wipe" style="flex: 1;">Wipe</button>
@@ -520,7 +574,7 @@
         </div>
 
         <div class="mam-view" id="mam-view-audit">
-            <button class="mam-exit-btn" id="btn-close-audit" title="Back to Settings">
+            <button class="mam-exit-btn" id="btn-close-audit" title="Back to Settings" style="position: absolute; top: 6px; right: 8px;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
             </button>
             <div class="mam-audit-log-container" id="mam-audit-log">
@@ -568,7 +622,7 @@
         </div>
 
         <div class="mam-view" id="mam-view-changelog">
-            <button class="mam-exit-btn" id="btn-close-changelog" title="Back to About">
+            <button class="mam-exit-btn" id="btn-close-changelog" title="Back to About" style="position: absolute; top: 6px; right: 8px;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
             </button>
             <div class="mam-audit-log-container" id="mam-changelog-content" style="user-select: text;">
@@ -669,20 +723,35 @@
                 limit: 'ALL',
                 buyAmount: 'Off',
                 buyWhen: 65000,
-                renewVip: false,
-                vaultReminder: true,
-                lottoReminder: true,
+                storeAutomations: ['Vault', 'Lotto'],
                 uiPosition: 'bottom-right',
                 autoMinimize: [],
                 hideNews: 'Off',
                 compactLayout: false,
                 supportLinks: 'Off',
-                shoutboxGifting: true,
-                forumGifting: true
+                socialGifting: ['Shoutbox', 'Forum']
             }
         },
         tabChannel: new BroadcastChannel('giftmam_concurrency'),
         myTabId: Math.random().toString(36).substring(2, 9),
+        releaseLock: null,
+
+        async acquireExecutionLock() {
+            return new Promise(resolve => {
+                navigator.locks.request('giftmam_execution', { ifAvailable: true }, async (lock) => {
+                    if (!lock) return resolve(false);
+                    resolve(true);
+                    return new Promise(r => { this.releaseLock = r; });
+                });
+            });
+        },
+
+        releaseExecutionLock() {
+            if (this.releaseLock) {
+                this.releaseLock();
+                this.releaseLock = null;
+            }
+        },
 
         updateBP(bp) {
             this.state.currentBP = bp;
@@ -712,13 +781,10 @@
             // Hydrate ALL persistent configurations securely before any module reads them
             this.state.config.giftAmount = GM_getValue('giftAmount', '100');
             this.state.config.minReserve = parseInt(GM_getValue('minReserve', 15000), 10);
-            this.state.config.shoutboxGifting = GM_getValue('shoutboxGifting', true);
-            this.state.config.forumGifting = GM_getValue('forumGifting', true);
+            try { this.state.config.socialGifting = JSON.parse(GM_getValue('socialGifting', '["Shoutbox", "Forum"]')); } catch(e) { this.state.config.socialGifting = ['Shoutbox', 'Forum']; }
             this.state.config.buyAmount = GM_getValue('buyAmount', 'Off');
             this.state.config.buyWhen = parseInt(GM_getValue('buyWhen', 65000), 10);
-            this.state.config.renewVip = GM_getValue('renewVip', false);
-            this.state.config.vaultReminder = GM_getValue('vaultReminder', true);
-            this.state.config.lottoReminder = GM_getValue('lottoReminder', true);
+            try { this.state.config.storeAutomations = JSON.parse(GM_getValue('storeAutomations', '["Vault", "Lotto"]')); } catch(e) { this.state.config.storeAutomations = ['Vault', 'Lotto']; }
             this.state.config.uiPosition = GM_getValue('uiPosition', 'bottom-right');
             try {
                 const rawMin = GM_getValue('autoMinimize', '[]');
@@ -751,23 +817,28 @@
                 this.updateBP(cachedBP);
             }
 
+            // Fast graceful release on tab close
+            window.addEventListener('pagehide', () => {
+                if (this.state.isLeader) this.broadcast('LEADER_RELEASE');
+            });
+
             // Listen for cross-tab events
             this.tabChannel.onmessage = (e) => this.handleTabMessage(e.data);
 
-            // Ping to check if a leader already exists
-            this.broadcast('PING_LEADER', { from: this.myTabId });
-
-            // Hardened Concurrency Monitor (Runs on the unthrottled Thread clock)
-            Thread.setInterval(() => {
-                if (this.state.isLeader) {
-                    this.broadcast('LEADER_HEARTBEAT');
-                } else if (this.state.leaderTabId) {
-                    if (Date.now() - this.state.lastLeaderHeartbeat > 15000) {
-                        Logger.log("Leader tab lost. Releasing lock.");
+            // Sync UI state with native lock availability periodically
+            Thread.setInterval(async () => {
+                if (this.state.isLeader) return;
+                try {
+                    const lockState = await navigator.locks.query();
+                    const isLocked = lockState.held && lockState.held.some(l => l.name === 'giftmam_execution');
+                    if (!isLocked && this.state.leaderTabId) {
                         this.state.leaderTabId = null;
                         this.setExecutionUI('IDLE');
+                    } else if (isLocked && !this.state.leaderTabId) {
+                        this.state.leaderTabId = 'external';
+                        this.setExecutionUI('LOCKED');
                     }
-                }
+                } catch (err) {}
             }, 5000);
         },
 
@@ -783,36 +854,19 @@
 
         handleTabMessage(msg) {
             switch(msg.type) {
-                case 'PING_LEADER':
-                    if (this.state.isLeader) {
-                        this.broadcast('PONG_LEADER', { running: this.state.isRunning, progress: this.state.progress });
-                    }
-                    break;
-                case 'PONG_LEADER':
                 case 'LEADER_CLAIM':
                     this.state.isLeader = false;
                     this.state.leaderTabId = msg.tabId;
-                    this.state.lastLeaderHeartbeat = Date.now();
-                    this.setExecutionUI(msg.payload.running ? 'LOCKED' : 'IDLE');
-                    break;
-                case 'LEADER_HEARTBEAT':
-                    if (this.state.leaderTabId === msg.tabId) {
-                        this.state.lastLeaderHeartbeat = Date.now();
-                    } else if (!this.state.isLeader) {
-                        // Edge case: A new leader took over while we were suspended
-                        this.state.leaderTabId = msg.tabId;
-                        this.state.lastLeaderHeartbeat = Date.now();
-                        this.setExecutionUI('LOCKED');
-                    }
+                    this.setExecutionUI('LOCKED');
                     break;
                 case 'LEADER_RELEASE':
-                    if (this.state.leaderTabId === msg.tabId) {
+                    if (this.state.leaderTabId === msg.tabId || this.state.leaderTabId === 'external') {
                         this.state.leaderTabId = null;
                         this.setExecutionUI('IDLE');
                     }
                     break;
                 case 'PROGRESS_SYNC':
-                    if (this.state.leaderTabId === msg.tabId) {
+                    if (!this.state.isLeader) {
                         this.updateProgressBar(msg.payload.progress);
                         if (msg.payload.bp !== undefined) this.updateBP(msg.payload.bp);
                     }
@@ -923,10 +977,9 @@
             GM_setValue(this.key, JSON.stringify(this.cache));
             window.dispatchEvent(new CustomEvent('mam-db-updated'));
         },
-        add(userId, username = null) {
+        add(userId) {
             this.load();
             if (userId) this.cache.uids[userId] = Date.now();
-            if (username) this.cache.legacy[username.toLowerCase()] = Date.now();
             this.save();
         },
         has(userId, username = null) {
@@ -1262,6 +1315,7 @@
                 btn.classList.remove('stopping');
             }
             StateManager.broadcast('LEADER_RELEASE');
+            StateManager.releaseExecutionLock();
             WakeLock.release();
         },
 
@@ -1278,7 +1332,7 @@
                 const targetInterval = 15 * 60 * 1000;
 
                 if (elapsed >= targetInterval) {
-                    if ((StateManager.state.config.buyAmount !== 'Off' || StateManager.state.config.renewVip) && !StateManager.state.isRunning) {
+                    if ((StateManager.state.config.buyAmount !== 'Off' || StateManager.state.config.storeAutomations.includes('VIP')) && !StateManager.state.isRunning) {
                         await this.triggerHeartbeat();
                         this.lastHeartbeat = Date.now();
                     } else {
@@ -1312,7 +1366,7 @@
             };
 
             // 1. VIP Renewal Evaluation
-            if (StateManager.state.config.renewVip && vipUntilStr) {
+            if (StateManager.state.config.storeAutomations.includes('VIP') && vipUntilStr) {
                 const vipExpiration = new Date(vipUntilStr.replace(/-/g, '/')).getTime();
                 const remainingTimeMs = vipExpiration - Date.now();
                 const maxVipMs = 90 * 24 * 60 * 60 * 1000;
@@ -1395,8 +1449,10 @@
 
         async start() {
             if (StateManager.state.isRunning) return;
-            if (StateManager.state.leaderTabId && StateManager.state.leaderTabId !== StateManager.myTabId) {
-                Logger.log("Blocked: Another tab is controlling the queue.");
+
+            const hasLock = await StateManager.acquireExecutionLock();
+            if (!hasLock) {
+                Logger.log("Blocked: Another tab is actively gifting.");
                 return;
             }
 
@@ -1774,11 +1830,11 @@
 
             // Listen for configuration toggles
             window.addEventListener('mam-config-updated', (e) => {
-                if (e.detail.key === 'vaultReminder' || e.detail.key === 'lottoReminder') {
+                if (e.detail.key === 'storeAutomations') {
                     this.updateUI();
-                }
-                if (e.detail.key === 'renewVip' && e.detail.value === true) {
-                    Engine.triggerHeartbeat();
+                    if (e.detail.value.includes('VIP')) {
+                        Engine.triggerHeartbeat();
+                    }
                 }
             });
 
@@ -1829,13 +1885,13 @@
             const lottoBtn = document.getElementById('btn-lotto-alert');
 
             if (vaultBtn) {
-                const isEnabled = StateManager.state.config.vaultReminder;
+                const isEnabled = StateManager.state.config.storeAutomations.includes('Vault');
                 const nextVault = parseInt(GM_getValue('mam_vault_next_reset', '0'), 10);
                 vaultBtn.style.display = (isEnabled && now > nextVault) ? 'inline-block' : 'none';
             }
 
             if (lottoBtn) {
-                const isEnabled = StateManager.state.config.lottoReminder;
+                const isEnabled = StateManager.state.config.storeAutomations.includes('Lotto');
                 const nextLotto = parseInt(GM_getValue('mam_lotto_next_check', '0'), 10);
                 lottoBtn.style.display = (isEnabled && now > nextLotto) ? 'inline-block' : 'none';
             }
@@ -1847,11 +1903,11 @@
         init() {
             this.evaluateState();
             window.addEventListener('mam-config-updated', (e) => {
-                if (e.detail.key === 'shoutboxGifting') this.evaluateState();
+                if (e.detail.key === 'socialGifting') this.evaluateState();
             });
         },
         evaluateState() {
-            const isEnabled = StateManager.state.config.shoutboxGifting;
+            const isEnabled = StateManager.state.config.socialGifting.includes('Shoutbox');
             const sbMenuMain = document.getElementById('sbMenuMain');
             if (!sbMenuMain) return;
 
@@ -2028,11 +2084,11 @@
             if (!window.location.pathname.startsWith('/f/t/57795')) return;
             this.evaluateState();
             window.addEventListener('mam-config-updated', (e) => {
-                if (e.detail.key === 'forumGifting') this.evaluateState();
+                if (e.detail.key === 'socialGifting') this.evaluateState();
             });
         },
         evaluateState() {
-            if (StateManager.state.config.forumGifting) {
+            if (StateManager.state.config.socialGifting.includes('Forum')) {
                 this.injectButtons();
             } else {
                 this.removeButtons();
@@ -2206,12 +2262,12 @@
             if (window.location.pathname.startsWith('/f/t/')) {
                 this.evaluateState();
                 window.addEventListener('mam-config-updated', (e) => {
-                    if (e.detail.key === 'forumGifting') this.evaluateState();
+                    if (e.detail.key === 'socialGifting') this.evaluateState();
                 });
             }
         },
         evaluateState() {
-            if (StateManager.state.config.forumGifting) {
+            if (StateManager.state.config.socialGifting.includes('Forum')) {
                 this.injectButtons();
             } else {
                 this.removeButtons();
@@ -2346,7 +2402,7 @@
     DailyTracker.updateUI();
 
     // Check store queue on F5/Page Load if condition is met
-    if ((StateManager.state.config.buyAmount !== 'Off' || StateManager.state.config.renewVip) && StateManager.state.currentBP !== null && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
+    if ((StateManager.state.config.buyAmount !== 'Off' || StateManager.state.config.storeAutomations.includes('VIP')) && StateManager.state.currentBP !== null && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
         Engine.triggerHeartbeat();
     }
 
@@ -2359,7 +2415,7 @@
             const queueHtml = queueCount > 0 ? ` <span style="color:#00bcd4; font-weight:bold;">(${queueCount})</span>` : '';
 
             countEl.innerHTML = `${total}${queueHtml}`;
-            countEl.parentElement.title = `Mice Gifted: ${total} | In Queue: ${queueCount}`;
+            countEl.parentElement.title = `Lifetime Mice Gifted: ${total} | In Queue: ${queueCount}`;
         }
     };
     window.addEventListener('mam-db-updated', updateStatsCount);
@@ -2430,13 +2486,8 @@
 
     bindInput('mam-cfg-amount', 'giftAmount', 'string');
     bindInput('mam-cfg-reserve', 'minReserve', 'number', 1000, 99999);
-    bindInput('mam-cfg-shoutbox', 'shoutboxGifting', 'checkbox');
-    bindInput('mam-cfg-forum', 'forumGifting', 'checkbox');
     bindSegment('mam-cfg-buy-amount', 'buyAmount');
     const elBuyWhen = bindInput('mam-cfg-buy-when', 'buyWhen', 'number', 1000, 99999);
-    bindInput('mam-cfg-renew-vip', 'renewVip', 'checkbox');
-    bindInput('mam-cfg-vault-remind', 'vaultReminder', 'checkbox');
-    bindInput('mam-cfg-lotto-remind', 'lottoReminder', 'checkbox');
     bindSegment('mam-cfg-hide-news', 'hideNews');
     bindInput('mam-cfg-compact', 'compactLayout', 'checkbox');
     bindSegment('mam-cfg-support-links', 'supportLinks');
@@ -2472,6 +2523,8 @@
     };
 
     bindMultiSegment('mam-cfg-auto-minimize', 'autoMinimize');
+    bindMultiSegment('mam-cfg-social-gifting', 'socialGifting');
+    bindMultiSegment('mam-cfg-store-automations', 'storeAutomations');
 
     // UI Logic: Disable 'Buy When' if 'Buy Amount' is 'Off'
     const toggleBuyWhen = () => {
@@ -2566,7 +2619,12 @@
         settings: document.getElementById('mam-view-settings'),
         about: document.getElementById('mam-view-about'),
         audit: document.getElementById('mam-view-audit'),
-        changelog: document.getElementById('mam-view-changelog')
+        changelog: document.getElementById('mam-view-changelog'),
+        setGifting: document.getElementById('mam-view-set-gifting'),
+        setApi: document.getElementById('mam-view-set-api'),
+        setUiWidget: document.getElementById('mam-view-set-ui-widget'),
+        setUiSite: document.getElementById('mam-view-set-ui-site'),
+        setData: document.getElementById('mam-view-set-data')
     };
 
     function switchView(targetViewKey) {
@@ -2581,15 +2639,15 @@
         }
 
         // Reset header button colors
-        document.getElementById('btn-settings').style.color = (targetViewKey === 'settings' || targetViewKey === 'audit') ? 'var(--mam-accent)' : 'var(--mam-text-muted)';
+        const inSettingsTree = ['settings', 'audit', 'setGifting', 'setApi', 'setUiWidget', 'setUiSite', 'setData'].includes(targetViewKey);
+        document.getElementById('btn-settings').style.color = inSettingsTree ? 'var(--mam-accent)' : 'var(--mam-text-muted)';
     }
 
     // Bind Header Buttons
     document.getElementById('btn-settings').addEventListener('click', (e) => {
         e.stopPropagation();
-        // Return to main if currently in settings or audit
-        const isActive = views.settings.classList.contains('active') || views.audit.classList.contains('active');
-        switchView(isActive ? 'main' : 'settings');
+        const inSettingsTree = ['settings', 'audit', 'setGifting', 'setApi', 'setUiWidget', 'setUiSite', 'setData'].some(k => views[k] && views[k].classList.contains('active'));
+        switchView(inSettingsTree ? 'main' : 'settings');
     });
 
     const titleIconBtn = document.getElementById('btn-about-title');
@@ -2603,6 +2661,21 @@
         });
     }
 
+    // Bind Sub-Menu Navigation
+    document.querySelectorAll('.mam-menu-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            switchView(btn.dataset.target);
+        });
+    });
+
+    document.querySelectorAll('.btn-back-settings').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            switchView('settings');
+        });
+    });
+
     // Bind Audit Buttons
     document.getElementById('btn-open-audit').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2612,7 +2685,7 @@
 
     document.getElementById('btn-close-audit').addEventListener('click', (e) => {
         e.stopPropagation();
-        switchView('settings');
+        switchView('setApi');
     });
 
     // Bind Changelog Buttons
