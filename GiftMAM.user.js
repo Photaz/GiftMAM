@@ -491,7 +491,7 @@
                     <input type="number" id="mam-cfg-buy-when" min="1000" max="999999">
                 </div>
                 <div class="mam-setting-row">
-                    <label>Automations:</label>
+                    <label>VIP & Alerts:</label>
                     <div class="mam-segment-grid" id="mam-cfg-store-automations" style="width: 120px;">
                         <div class="mam-segment" data-val="VIP">VIP</div>
                         <div class="mam-segment" data-val="Vault">Vault</div>
