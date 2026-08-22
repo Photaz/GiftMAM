@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.0.5
+// @version      3.0.6
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -10,6 +10,9 @@
 // @downloadURL  https://github.com/Photaz/GiftMAM/raw/main/GiftMAM.user.js
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_setValues
+// @grant        GM_getValues
+// @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getResourceURL
 // @icon         https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/main.svg
@@ -18,6 +21,7 @@
 // @resource     iconTrap https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/mouse-trap.svg
 // @resource     iconMouse https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/mouse.svg
 // @resource     iconMain https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/main.svg
+// @resource     iconMainTp https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/main-tp.svg
 // @resource     iconSettings https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/settings.svg
 // @resource     iconMinimize https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/minimize.svg
 // @resource     iconApi https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/api.svg
@@ -35,6 +39,9 @@
 // @resource     iconBuy https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/buy.svg
 // @resource     iconCrown https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/crown.svg
 // @resource     iconSlow https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/slow.svg
+// @resource     iconLoad https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/loading.svg
+// @resource     iconLock https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/lock.svg
+// @resource     iconRefresh https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/refresh.svg
 // @resource     iconError https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/error.svg
 // @resource     iconCheck https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/check.svg
 // @connect      api.github.com
@@ -58,8 +65,7 @@
     // ==========================================
     // 1. CSS INJECTION (Adaptive Theming & Shadows)
     // ==========================================
-    const style = document.createElement('style');
-    style.textContent = `
+    GM_addStyle(`
         :root {
             /* Theme Hooks with fallbacks */
             --site-bg: var(--secondary-background, #131313);
@@ -107,7 +113,8 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            transition: all 0.3s ease;
+            /* Snaps dimensions instantly to avoid flexbox layout jank while fading shadows */
+            transition: opacity 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
         }
 
         /* --- HEADER & CONTROLS --- */
@@ -183,7 +190,7 @@
             display: flex; justify-content: space-between; align-items: center;
             height: 27px; flex-shrink: 0; margin: 0;
         }
-        .mam-setting-row label { color: var(--mam-text); }
+        .mam-setting-row label, .mam-setting-row .mam-label-text { color: var(--mam-text); }
         .mam-settings-container strong, .mam-about-container h4 { color: var(--mam-text); }
 
         /* Standardized Setting Controls */
@@ -340,16 +347,19 @@
         }
 
         /* --- MINIMIZED STATE --- */
+        #mam-gift-panel {
+            /* Base variable to track liquid fill level */
+            --mam-progress: 0%;
+            --mam-fill-color: #3498DB;
+        }
+
         #mam-gift-panel.minimized {
             width: 60px; height: 60px; border-radius: 50%;
             cursor: pointer; display: flex; align-items: center; justify-content: center;
             padding: 0;
-            border: none; /* Removed standard border for gradient ring */
+            border: none;
             box-shadow: var(--mam-shadow-box);
-
-            /* Progress variable to be updated by JS */
-            --mam-progress: 0%;
-            background: conic-gradient(var(--mam-accent) var(--mam-progress), var(--mam-border) 0deg);
+            /* Inherits the dark panel background natively to eliminate the white-flash alpha interpolation */
         }
         #mam-gift-panel.minimized > * { display: none; }
         #mam-min-icon { display: none; }
@@ -364,15 +374,18 @@
         }
 
         #mam-gift-panel.minimized #mam-min-icon img {
-            /* 56px leaves exactly 2px on all sides exposing the conic-gradient behind it */
-            width: 56px !important;
-            height: 56px !important;
+            width: 60px !important;
+            height: 60px !important;
             border-radius: 50%;
-            filter: none; /* Removed shadow bleeding */
-            background: var(--site-bg); /* Fills transparent gaps if the SVG has any */
+            filter: none;
+            /* SVG fill level mapped via JS variable to prevent visual bleeding at 0% */
+            background: linear-gradient(
+                to top,
+                var(--mam-fill-color) var(--mam-progress),
+                #111 var(--mam-progress)
+            );
         }
-    `;
-    document.head.appendChild(style);
+    `);
 
 
     // ==========================================
@@ -383,7 +396,7 @@
         gift:     GM_getResourceURL('iconGift'),
         trap:     GM_getResourceURL('iconTrap'),
         mouse:    GM_getResourceURL('iconMouse'),
-        main:     GM_getResourceURL('iconMain'),
+        main:     GM_getResourceURL('iconMainTp'),
         settings: GM_getResourceURL('iconSettings'),
         minimize: GM_getResourceURL('iconMinimize'),
         api:      GM_getResourceURL('iconApi'),
@@ -401,10 +414,12 @@
         buy:      GM_getResourceURL('iconBuy'),
         crown:    GM_getResourceURL('iconCrown'),
         slow:     GM_getResourceURL('iconSlow'),
+        load:     GM_getResourceURL('iconLoad'),
+        lock:     GM_getResourceURL('iconLock'),
+        refresh:  GM_getResourceURL('iconRefresh'),
         error:    GM_getResourceURL('iconError'),
         check:    GM_getResourceURL('iconCheck'),
-        search:   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235EB9FF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E",
-        hidden:   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23bbaa77' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22'/%3E%3C/svg%3E"
+        search:   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235EB9FF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E"
     };
 
     const logIcon = (name, size = 11) => `<img src="${icons[name]}" style="width: ${size}px; height: ${size}px; vertical-align: text-bottom; margin-right: 4px; filter: drop-shadow(1px 1px 0px rgba(0,0,0,0.5));">`;
@@ -425,7 +440,7 @@
         </div>
 
         <div class="mam-view active" id="mam-view-main">
-            <button class="mam-refresh-btn" title="Refresh"><img class="invertBlue" src="/pic/refresh.svg" alt="refresh"></button>
+            <button class="mam-refresh-btn" title="Refresh"><img src="${icons.refresh}" alt="refresh"></button>
             <div class="mam-log-container"></div>
         </div>
 
@@ -451,15 +466,15 @@
                     </div>
                 </div>
                 <div class="mam-setting-row">
-                    <label title="Accepts 5-1000 or 'Max'">Default Gift Amount:</label>
+                    <label for="mam-cfg-amount" title="Accepts 5-1000 or 'Max'">Default Gift Amount:</label>
                     <input type="text" id="mam-cfg-amount" placeholder="100" maxlength="6">
                 </div>
                 <div class="mam-setting-row">
-                    <label>Minimum BP Reserve:</label>
+                    <label for="mam-cfg-reserve">Minimum BP Reserve:</label>
                     <input type="number" id="mam-cfg-reserve" min="1000" max="999999">
                 </div>
                 <div class="mam-setting-row">
-                    <label>Social Gifting:</label>
+                    <span class="mam-label-text">Social Gifting:</span>
                     <div class="mam-segment-grid" id="mam-cfg-social-gifting" style="width: 120px;">
                         <div class="mam-segment" data-val="Shoutbox">Shoutbox</div>
                         <div class="mam-segment" data-val="Forum">Forum</div>
@@ -478,7 +493,7 @@
                     </div>
                 </div>
                 <div class="mam-setting-row">
-                    <label>Buy Amount:</label>
+                    <span class="mam-label-text">Buy Amount:</span>
                     <div class="mam-segment-grid" id="mam-cfg-buy-amount">
                         <div class="mam-segment" data-val="Off">Off</div>
                         <div class="mam-segment" data-val="50GB">50</div>
@@ -487,11 +502,11 @@
                     </div>
                 </div>
                 <div class="mam-setting-row" id="row-buy-when">
-                    <label>Buy When ≥:</label>
+                    <label for="mam-cfg-buy-when">Buy When ≥:</label>
                     <input type="number" id="mam-cfg-buy-when" min="1000" max="999999">
                 </div>
                 <div class="mam-setting-row">
-                    <label>VIP & Alerts:</label>
+                    <span class="mam-label-text">VIP & Alerts:</span>
                     <div class="mam-segment-grid" id="mam-cfg-store-automations" style="width: 120px;">
                         <div class="mam-segment" data-val="VIP">VIP</div>
                         <div class="mam-segment" data-val="Vault">Vault</div>
@@ -508,7 +523,7 @@
                     <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
                 </div>
                 <div class="mam-setting-row">
-                    <label>Position:</label>
+                    <span class="mam-label-text">Position:</span>
                     <div class="mam-pos-grid" id="mam-cfg-position">
                         <div class="mam-pos-box" data-val="top-left"><img src="${icons.posTL}"></div>
                         <div class="mam-pos-box" data-val="top-right"><img src="${icons.posTR}"></div>
@@ -517,7 +532,7 @@
                     </div>
                 </div>
                 <div class="mam-setting-row">
-                    <label>Minimize:</label>
+                    <span class="mam-label-text">Minimize:</span>
                     <div class="mam-segment-grid" id="mam-cfg-auto-minimize" style="width: 120px;">
                         <div class="mam-segment" data-val="Index">Index</div>
                         <div class="mam-segment" data-val="New">New</div>
@@ -534,7 +549,7 @@
                     <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
                 </div>
                 <div class="mam-setting-row">
-                    <label>Hide News:</label>
+                    <span class="mam-label-text">Hide News:</span>
                     <div style="display: flex; gap: 6px; align-items: center;">
                         <button id="btn-reset-news" class="mam-emoji mam-hover-opacity" title="Reset Dismissed News" style="background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center;"><img src="${icons.reset}" style="width: 18px; height: 18px;"></button>
                         <div class="mam-segment-grid" id="mam-cfg-hide-news" style="width: 90px;">
@@ -545,11 +560,11 @@
                     </div>
                 </div>
                 <div class="mam-setting-row">
-                    <label>Compact Layout:</label>
+                    <label for="mam-cfg-compact">Compact Layout:</label>
                     <label class="mam-toggle"><input type="checkbox" id="mam-cfg-compact"><span class="mam-slider"></span></label>
                 </div>
                 <div class="mam-setting-row">
-                    <label>Support Links Layout:</label>
+                    <span class="mam-label-text">Support Links Layout:</span>
                     <div class="mam-segment-grid" id="mam-cfg-support-links" style="width: 110px;">
                         <div class="mam-segment" data-val="Off">Off</div>
                         <div class="mam-segment" data-val="Blend">Blend</div>
@@ -691,6 +706,9 @@
 
     const WakeLock = {
         screenLock: null,
+        pc1: null,
+        pc2: null,
+        heartbeatTimer: null,
 
         async acquire() {
             if ('wakeLock' in navigator) {
@@ -698,12 +716,48 @@
                     this.screenLock = await navigator.wakeLock.request('screen');
                 } catch (err) { }
             }
+
+            if (!this.pc1) {
+                try {
+                    this.pc1 = new RTCPeerConnection();
+                    this.pc2 = new RTCPeerConnection();
+
+                    const dc1 = this.pc1.createDataChannel('keepalive');
+
+                    this.pc1.onicecandidate = e => { if (e.candidate) this.pc2?.addIceCandidate(e.candidate); };
+                    this.pc2.onicecandidate = e => { if (e.candidate) this.pc1?.addIceCandidate(e.candidate); };
+
+                    const offer = await this.pc1.createOffer();
+                    await this.pc1.setLocalDescription(offer);
+                    await this.pc2.setRemoteDescription(offer);
+
+                    const answer = await this.pc2.createAnswer();
+                    await this.pc2.setLocalDescription(answer);
+                    await this.pc1.setRemoteDescription(answer);
+
+                    this.heartbeatTimer = setInterval(() => {
+                        if (dc1.readyState === 'open') {
+                            dc1.send('ping');
+                        }
+                    }, 2000);
+                } catch (err) {}
+            }
         },
 
         release() {
             if (this.screenLock) {
                 this.screenLock.release();
                 this.screenLock = null;
+            }
+            if (this.heartbeatTimer) {
+                clearInterval(this.heartbeatTimer);
+                this.heartbeatTimer = null;
+            }
+            if (this.pc1) {
+                this.pc1.close();
+                this.pc2.close();
+                this.pc1 = null;
+                this.pc2 = null;
             }
         }
     };
@@ -777,24 +831,37 @@
             }
         },
 
-        init() {
+       init() {
             // Hydrate ALL persistent configurations securely before any module reads them
-            this.state.config.giftAmount = GM_getValue('giftAmount', '100');
-            this.state.config.minReserve = parseInt(GM_getValue('minReserve', 15000), 10);
-            try { this.state.config.socialGifting = JSON.parse(GM_getValue('socialGifting', '["Shoutbox", "Forum"]')); } catch(e) { this.state.config.socialGifting = ['Shoutbox', 'Forum']; }
-            this.state.config.buyAmount = GM_getValue('buyAmount', 'Off');
-            this.state.config.buyWhen = parseInt(GM_getValue('buyWhen', 65000), 10);
-            try { this.state.config.storeAutomations = JSON.parse(GM_getValue('storeAutomations', '["Vault", "Lotto"]')); } catch(e) { this.state.config.storeAutomations = ['Vault', 'Lotto']; }
-            this.state.config.uiPosition = GM_getValue('uiPosition', 'bottom-right');
+            const stored = GM_getValues({
+                giftAmount: '100',
+                minReserve: 15000,
+                socialGifting: '["Shoutbox", "Forum"]',
+                buyAmount: 'Off',
+                buyWhen: 65000,
+                storeAutomations: '["Vault", "Lotto"]',
+                uiPosition: 'bottom-right',
+                autoMinimize: '[]',
+                hideNews: 'Off',
+                compactLayout: false,
+                supportLinks: 'Off'
+            });
+
+            this.state.config.giftAmount = stored.giftAmount;
+            this.state.config.minReserve = parseInt(stored.minReserve, 10);
+            try { this.state.config.socialGifting = JSON.parse(stored.socialGifting); } catch(e) { this.state.config.socialGifting = ['Shoutbox', 'Forum']; }
+            this.state.config.buyAmount = stored.buyAmount;
+            this.state.config.buyWhen = parseInt(stored.buyWhen, 10);
+            try { this.state.config.storeAutomations = JSON.parse(stored.storeAutomations); } catch(e) { this.state.config.storeAutomations = ['Vault', 'Lotto']; }
+            this.state.config.uiPosition = stored.uiPosition;
             try {
-                const rawMin = GM_getValue('autoMinimize', '[]');
-                this.state.config.autoMinimize = typeof rawMin === 'string' ? JSON.parse(rawMin) : rawMin;
+                this.state.config.autoMinimize = typeof stored.autoMinimize === 'string' ? JSON.parse(stored.autoMinimize) : stored.autoMinimize;
             } catch (e) {
                 this.state.config.autoMinimize = [];
             }
-            this.state.config.hideNews = GM_getValue('hideNews', 'Off');
-            this.state.config.compactLayout = GM_getValue('compactLayout', false);
-            this.state.config.supportLinks = GM_getValue('supportLinks', 'Off');
+            this.state.config.hideNews = stored.hideNews;
+            this.state.config.compactLayout = stored.compactLayout;
+            this.state.config.supportLinks = stored.supportLinks;
 
             // Scrape and initialize BP from native data attribute
             const domBP = document.getElementById('tmBP');
@@ -863,11 +930,18 @@
                     if (this.state.leaderTabId === msg.tabId || this.state.leaderTabId === 'external') {
                         this.state.leaderTabId = null;
                         this.setExecutionUI('IDLE');
+                        if (msg.payload) {
+                            if (msg.payload.clearProgress) {
+                                this.updateProgressBar(0, msg.payload.color || '#3498DB');
+                            } else {
+                                this.updateProgressBar(msg.payload.progress || 0, msg.payload.color || '#3498DB');
+                            }
+                        }
                     }
                     break;
                 case 'PROGRESS_SYNC':
                     if (!this.state.isLeader) {
-                        this.updateProgressBar(msg.payload.progress);
+                        this.updateProgressBar(msg.payload.progress, msg.payload.color || '#3498DB');
                         if (msg.payload.bp !== undefined) this.updateBP(msg.payload.bp);
                     }
                     break;
@@ -888,10 +962,15 @@
             }
         },
 
-        updateProgressBar(percentage) {
+        updateProgressBar(percentage, color = '#3498DB') {
             const panel = document.getElementById('mam-gift-panel');
-            if (panel && panel.classList.contains('minimized')) {
-                panel.style.setProperty('--mam-progress', `${percentage}%`);
+            if (panel) {
+                // Map the 0-100% queue progress to the 25%-85% visual space of the mouse SVG
+                let visualProgress = percentage === 0 ? 0 : 25 + (percentage * 0.60);
+                if (percentage >= 100) visualProgress = 100; // Ensure full cover at end
+
+                panel.style.setProperty('--mam-progress', `${visualProgress}%`);
+                panel.style.setProperty('--mam-fill-color', color);
             }
         }
     };
@@ -1304,17 +1383,21 @@
             return fetch(url, options);
         },
 
-        resetUI() {
+        resetUI(clearProgress = true, color = '#3498DB') {
             StateManager.state.isRunning = false;
             StateManager.state.isLeader = false;
             StateManager.state.leaderTabId = null;
-            StateManager.state.progress = 0;
-            StateManager.updateProgressBar(0);
+            if (clearProgress) {
+                StateManager.state.progress = 0;
+                StateManager.updateProgressBar(0, color);
+            } else {
+                StateManager.updateProgressBar(StateManager.state.progress, color);
+            }
             const btn = document.getElementById('btn-run');
             if (btn) {
                 btn.classList.remove('stopping');
             }
-            StateManager.broadcast('LEADER_RELEASE');
+            StateManager.broadcast('LEADER_RELEASE', { clearProgress, progress: StateManager.state.progress, color });
             StateManager.releaseExecutionLock();
             WakeLock.release();
         },
@@ -1479,6 +1562,8 @@
 
             StateManager.state.isRunning = true;
             StateManager.state.isLeader = true;
+            StateManager.state.progress = 0;
+            StateManager.updateProgressBar(0, '#3498DB'); // Immediately flushes any old completed state upon restart
             StateManager.broadcast('LEADER_CLAIM', { running: true });
             WakeLock.acquire();
 
@@ -1624,15 +1709,24 @@
                 }
             }
 
+            let finalColor = '#3498DB';
+            let shouldClear = true;
+
             if (abortReason && abortReason !== "stopped") {
                 Logger.log(abortReason);
+                if (abortReason.includes("daily limit")) {
+                    finalColor = '#E74C3C'; // Red
+                    shouldClear = false; // Hold the partial progress bar
+                }
             } else if (abortReason === "stopped") {
                 Logger.log(`${logIcon('stop')} Stopped.`);
+                shouldClear = true;
             } else {
                 Logger.log(`${logIcon('gift')} Gifting complete.`);
+                shouldClear = false;
             }
 
-            this.resetUI();
+            this.resetUI(shouldClear, finalColor);
 
             if (StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
                 this.triggerHeartbeat();
@@ -1901,10 +1995,95 @@
     const ShoutboxManager = {
         observer: null,
         init() {
+            this.injectReconnectButton();
             this.evaluateState();
             window.addEventListener('mam-config-updated', (e) => {
                 if (e.detail.key === 'socialGifting') this.evaluateState();
             });
+        },
+        injectReconnectButton() {
+            const sbTabs = document.getElementById('sbMenuTabs');
+            if (sbTabs && !document.getElementById('mam-sb-reconnect')) {
+                const reconnectLi = document.createElement('li');
+                reconnectLi.style.cssText = 'float: right; list-style: none; margin: 4px 10px 0 0;';
+
+                const reconnectBtn = document.createElement('a');
+                reconnectBtn.id = 'mam-sb-reconnect';
+                reconnectBtn.className = 'mam-emoji';
+                reconnectBtn.innerHTML = `<img src="${icons.refresh}" alt="refresh" style="width: 14px; height: 14px; display: block; filter: var(--mam-shadow-emoji);">`;
+                reconnectBtn.title = "Reconnect Shoutbox";
+                reconnectBtn.style.cssText = 'cursor: pointer; opacity: 0.6; transition: opacity 0.2s; display: block;';
+
+                reconnectBtn.onmouseover = () => { reconnectBtn.style.opacity = '1'; };
+                reconnectBtn.onmouseout = () => { reconnectBtn.style.opacity = '0.6'; };
+
+                reconnectBtn.onclick = (e) => {
+                    e.preventDefault();
+                    Logger.log(`${logIcon('load', 13)} Reconnecting shoutbox...`);
+
+                    try {
+                        const liveSbf = document.querySelector('#sbf .blockBodyCon');
+
+                        if (liveSbf) {
+                            const scrollObserver = new MutationObserver((mutations, obs) => {
+                                for (let m of mutations) {
+                                    if (m.addedNodes.length > 0) {
+                                        const chatContainer = document.querySelector('#sbf');
+                                        if (chatContainer) {
+                                            setTimeout(() => {
+                                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                                                Logger.log(`${logIcon('check', 13)} Shoutbox reconnected.`);
+                                            }, 100);
+                                        }
+                                        obs.disconnect();
+                                        break;
+                                    }
+                                }
+                            });
+                            scrollObserver.observe(liveSbf, { childList: true });
+                        }
+
+                        const resetScript = document.createElement('script');
+                        resetScript.textContent = `
+                            (() => {
+                                if (typeof updateTimer !== 'undefined') clearInterval(updateTimer);
+                                if (typeof sbLoadAjax !== 'undefined' && sbLoadAjax !== null) {
+                                    try { sbLoadAjax.abort(); } catch(err) {}
+                                }
+                                if (typeof $ !== 'undefined' && $.fn && $.fn.dialog) {
+                                    try { $('.ui-dialog-content').dialog('close'); } catch(err) {}
+                                }
+
+                                minID = 0;
+                                maxID = 0;
+                                shoutboxInitial = true;
+                                sbLastAction = null;
+                                if (typeof sb_paused !== 'undefined') sb_paused = false;
+
+                                const sbfCon = document.querySelector('#sbf .blockBodyCon');
+                                if (sbfCon) sbfCon.innerHTML = '<a id="loadMore" class="loadMore" onclick="sbLoad(\\'append\\')">Load Older</a>';
+
+                                document.querySelectorAll('#sbform input').forEach(el => el.disabled = false);
+                                if (typeof $ !== 'undefined') {
+                                    $('#sbform').off('submit').on('submit', function() { return submitShout(); });
+                                }
+
+                                if (typeof startSBupdate === 'function') {
+                                    startSBupdate();
+                                }
+                            })();
+                        `;
+                        document.body.appendChild(resetScript);
+                        resetScript.remove();
+
+                    } catch (err) {
+                        Logger.log(`${logIcon('error', 13)} Reconnect failed. Please refresh.`);
+                    }
+                };
+
+                reconnectLi.appendChild(reconnectBtn);
+                sbTabs.appendChild(reconnectLi);
+            }
         },
         evaluateState() {
             const isEnabled = StateManager.state.config.socialGifting.includes('Shoutbox');
@@ -2141,7 +2320,7 @@
         async verifyPost(pid, btn) {
             btn.onclick = null; // Prevent multi-clicks
             btn.classList.remove('mam-hover-scale');
-            btn.innerHTML = `<img src="${icons.slow}" style="width: 14px; height: 14px; display: block;">`;
+            btn.innerHTML = `<img src="${icons.load}" style="width: 14px; height: 14px; display: block;">`;
             btn.title = "Parsing and validating...";
 
             const postTd = document.getElementById(`postID${pid}`);
@@ -2238,7 +2417,7 @@
 
             if (!passed && validDates.length < 3) {
                 if ((validDates.length + hiddenCount) >= 3) {
-                    this.setResult(btn, icons.hidden, "User uploads are hidden. Manual verification required.");
+                    this.setResult(btn, icons.lock, "User uploads are hidden.");
                 } else {
                     this.setResult(btn, icons.error, `Only ${validDates.length} links verified as owned by user. Need 3.`);
                 }
