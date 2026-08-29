@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.0.6
+// @version      3.0.8
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -95,6 +95,10 @@
         a.mam-gifted-user span {
             color: #bbaa77 !important;
             font-weight: bold !important;
+        }
+        a.mam-invalid-user,
+        a.mam-invalid-user span {
+            text-decoration: line-through !important;
         }
 
         #mam-gift-panel {
@@ -945,6 +949,14 @@
                         if (msg.payload.bp !== undefined) this.updateBP(msg.payload.bp);
                     }
                     break;
+                case 'DAILIES_UPDATE':
+                    DailiesManager.updateUI();
+                    break;
+                case 'NOTIF_CLEARED':
+                    if (typeof NotificationManager !== 'undefined') {
+                        NotificationManager.hideLocal(msg.payload.type);
+                    }
+                    break;
             }
         },
 
@@ -1039,15 +1051,16 @@
                     let parsed = raw ? JSON.parse(raw) : {};
                     // Auto-migrate flat beta data to structured schema
                     if (!parsed.uids && !parsed.legacy && parsed.archived === undefined) {
-                        parsed = { uids: { ...parsed }, legacy: {}, archived: 0 };
+                        parsed = { uids: { ...parsed }, legacy: {}, invalid: {}, archived: 0 };
                     }
                     this.cache = parsed;
                     // Ensure all keys exist
                     if (!this.cache.uids) this.cache.uids = {};
                     if (!this.cache.legacy) this.cache.legacy = {};
+                    if (!this.cache.invalid) this.cache.invalid = {};
                     if (typeof this.cache.archived !== 'number') this.cache.archived = 0;
                 } catch(e) {
-                    this.cache = { uids: {}, legacy: {}, archived: 0 };
+                    this.cache = { uids: {}, legacy: {}, invalid: {}, archived: 0 };
                 }
             }
             return this.cache;
@@ -1061,10 +1074,20 @@
             if (userId) this.cache.uids[userId] = Date.now();
             this.save();
         },
+        addInvalid(userId) {
+            this.load();
+            if (userId) this.cache.invalid[userId] = Date.now();
+            this.save();
+        },
         has(userId, username = null) {
             this.load();
             if (userId && this.cache.uids[userId]) return true;
             if (username && this.cache.legacy[username.toLowerCase()]) return true;
+            return false;
+        },
+        hasInvalid(userId) {
+            this.load();
+            if (userId && this.cache.invalid[userId]) return true;
             return false;
         },
         count() {
@@ -1077,18 +1100,19 @@
             let changed = false;
             let prunedCount = 0;
 
-            const checkPrune = (targetObj) => {
+            const checkPrune = (targetObj, countTowardsArchived = true) => {
                 for (const [id, timestamp] of Object.entries(targetObj)) {
                     if (now - timestamp > this.ttl) {
                         delete targetObj[id];
-                        prunedCount++;
+                        if (countTowardsArchived) prunedCount++;
                         changed = true;
                     }
                 }
             };
 
-            checkPrune(this.cache.uids);
-            checkPrune(this.cache.legacy);
+            checkPrune(this.cache.uids, true);
+            checkPrune(this.cache.legacy, true);
+            checkPrune(this.cache.invalid, false); // Don't count invalids towards lifetime gifts
 
             if (changed) {
                 this.cache.archived += prunedCount;
@@ -1123,6 +1147,7 @@
                 if (parsed && parsed.version && parsed.data) {
                     this.cache.uids = { ...this.cache.uids, ...parsed.data.uids };
                     this.cache.legacy = { ...this.cache.legacy, ...parsed.data.legacy };
+                    this.cache.invalid = { ...this.cache.invalid, ...(parsed.data.invalid || {}) };
                     const parsedArchived = parseInt(parsed.data.archived, 10);
                     if (!isNaN(parsedArchived)) {
                         this.cache.archived += parsedArchived;
@@ -1147,8 +1172,13 @@
         save(data) { GM_setValue(this.key, JSON.stringify(data)); },
         markVerified(pid) { const d = this.get(); if (!d[pid]) d[pid] = {}; d[pid].v = 1; this.save(d); },
         markGifted(pid) { const d = this.get(); if (!d[pid]) d[pid] = {}; d[pid].g = 1; this.save(d); },
+        markVerified1st(pid, tid, dlKey, snatched, isFree) { const d = this.get(); if (!d[pid]) d[pid] = {}; d[pid].v1 = 1; d[pid].tid = tid; d[pid].dk = dlKey; d[pid].sn = snatched ? 1 : 0; d[pid].fr = isFree ? 1 : 0; this.save(d); },
+        markThanked(pid) { const d = this.get(); if (!d[pid]) d[pid] = {}; d[pid].t = 1; this.save(d); },
         isVerified(pid) { return !!this.get()[pid]?.v; },
-        isGifted(pid) { return !!this.get()[pid]?.g; }
+        isGifted(pid) { return !!this.get()[pid]?.g; },
+        isVerified1st(pid) { return !!this.get()[pid]?.v1; },
+        isThanked(pid) { return !!this.get()[pid]?.t; },
+        get1stData(pid) { return this.get()[pid] || {}; }
     };
 
     const DailyTracker = {
@@ -1208,8 +1238,8 @@
 
             let uniqueUsers = Array.from(uniqueMap.values());
 
-            // Filter out users already in the GiftMAM database
-            this.users = uniqueUsers.filter(u => !Database.has(u.id, u.name));
+            // Filter out users already in the GiftMAM database or marked invalid
+            this.users = uniqueUsers.filter(u => !Database.has(u.id, u.name) && !Database.hasInvalid(u.id));
 
             // Overwrite cache entirely with the live DOM state, dropping stale/missed users
             GM_setValue(key, JSON.stringify(this.users));
@@ -1286,8 +1316,14 @@
             links.forEach(link => {
                 const id = link.getAttribute('href').split('/u/')[1];
                 const name = link.innerText.trim().split(' ')[0];
-                if (id && Database.has(id, name)) {
-                    link.classList.add('mam-gifted-user');
+                if (id) {
+                    if (Database.has(id, name)) {
+                        link.classList.add('mam-gifted-user');
+                        link.classList.remove('mam-invalid-user');
+                    } else if (Database.hasInvalid(id)) {
+                        link.classList.add('mam-invalid-user');
+                        link.classList.remove('mam-gifted-user');
+                    }
                 }
             });
         },
@@ -1569,7 +1605,7 @@
 
             // Ensure no duplicate IDs exist in the active queue array before running
             const uniqueTargets = Array.from(new Map(targets.map(u => [u.id, u])).values());
-            const safeTargets = uniqueTargets.filter(u => !Database.has(u.id, u.name));
+            const safeTargets = uniqueTargets.filter(u => !Database.has(u.id, u.name) && !Database.hasInvalid(u.id));
 
             if (safeTargets.length === 0) {
                 Logger.log("All targets already gifted. Aborting.");
@@ -1654,7 +1690,19 @@
                             DailyTracker.setCapReached();
                             abortReason = `${logIcon('stop', 13)} Server daily limit reached.`;
                             break;
-                        } else if (errStr.includes("daily cap") || errStr.includes("invalid") || errStr.includes("disabled") || errStr.includes("not found")) {
+                        } else if (errStr.includes("invalid") || errStr.includes("disabled") || errStr.includes("not found") || errStr.includes("does not exist")) {
+                            // Mark as Invalid
+                            Logger.log(`${logIcon('error', 13)} ${user.name}: Invalid/Disabled`);
+                            Database.addInvalid(user.id);
+                            QueueManager.markGiftedUI();
+                            QueueManager.users = QueueManager.users.filter(u => u.id !== user.id);
+                            updateStatsCount();
+
+                            const pct = Math.round(((i + 1) / safeTargets.length) * 100);
+                            StateManager.state.progress = pct;
+                            StateManager.updateProgressBar(pct);
+                            continue;
+                        } else if (errStr.includes("daily cap")) {
                             // Quiet Adoption (Skip)
                             Logger.log(`${logIcon('error', 13)} ${user.name}: ${data.error} (Adopted)`);
                             Database.add(user.id, user.name);
@@ -1939,10 +1987,12 @@
             if (vBtn) vBtn.addEventListener('click', () => {
                 GM_setValue('mam_vault_next_reset', (Date.now() + 300000).toString());
                 this.updateUI();
+                StateManager.broadcast('DAILIES_UPDATE');
             });
             if (lBtn) lBtn.addEventListener('click', () => {
                 GM_setValue('mam_lotto_next_check', (Date.now() + 300000).toString());
                 this.updateUI();
+                StateManager.broadcast('DAILIES_UPDATE');
             });
         },
         getMidnightUTC() {
@@ -1966,10 +2016,12 @@
             if (path === '/millionaires/donate.php') {
                 if (mainBody && mainBody.textContent.includes('You have already donated your max amount')) {
                     GM_setValue('mam_vault_next_reset', (this.getMidnightUTC() + 86400000).toString());
+                    StateManager.broadcast('DAILIES_UPDATE');
                 }
             } else if (path === '/play_lotto.php') {
                 if (mainBody && mainBody.textContent.includes('You have already played this week')) {
                     GM_setValue('mam_lotto_next_check', this.getNextLottoUTC().toString());
+                    StateManager.broadcast('DAILIES_UPDATE');
                 }
             }
         },
@@ -2436,6 +2488,265 @@
         }
     };
 
+    const FirstUploadVerifier = {
+        init() {
+            if (!window.location.pathname.startsWith('/f/t/35296')) return;
+            this.evaluateState();
+            window.addEventListener('mam-config-updated', (e) => {
+                if (e.detail.key === 'socialGifting') this.evaluateState();
+            });
+        },
+        evaluateState() {
+            if (StateManager.state.config.socialGifting.includes('Forum')) {
+                this.injectButtons();
+            } else {
+                document.querySelectorAll('.mam-verify-1st-btn').forEach(btn => btn.remove());
+            }
+        },
+        injectButtons() {
+            document.querySelectorAll('td[data-pid][align="right"]').forEach(td => {
+                const pid = td.dataset.pid;
+                const giftContainer = td.previousElementSibling?.querySelector('.mam-forum-gifting-container');
+                if (!giftContainer) return;
+
+                if (ThreadDB.isThanked(pid)) {
+                    const authorLink = td.closest('.coltable').querySelector('td.colhead[data-pid] a[href^="/u/"]');
+                    if (authorLink) {
+                        authorLink.style.setProperty('color', '#5EB9FF', 'important');
+                        authorLink.style.fontWeight = 'bold';
+                    }
+                }
+
+                if (giftContainer.querySelector('.mam-verify-1st-btn')) return;
+
+                const verifyBtn = document.createElement('span');
+                verifyBtn.className = 'mam-emoji mam-verify-1st-btn';
+                verifyBtn.style.cssText = "display: flex; align-items: center; margin-left: 2px;";
+
+                if (ThreadDB.isThanked(pid)) {
+                    this.setResult(verifyBtn, icons.check, "Passed & Thanked");
+                } else if (ThreadDB.isVerified1st(pid)) {
+                    const cachedData = ThreadDB.get1stData(pid);
+                    this.morphNextState(verifyBtn, pid, cachedData.tid, cachedData.dk, !!cachedData.sn, !!cachedData.fr, giftContainer);
+                } else {
+                    verifyBtn.classList.add('mam-hover-scale');
+                    verifyBtn.innerHTML = `<img src="${icons.search}" style="width: 14px; height: 14px; display: block;">`;
+                    verifyBtn.title = "Verify 1st Upload Rules";
+                    verifyBtn.style.cursor = "pointer";
+                    verifyBtn.onclick = () => this.verifyPost(pid, verifyBtn, giftContainer);
+                }
+
+                giftContainer.appendChild(verifyBtn);
+            });
+        },
+        async verifyPost(pid, btn, giftContainer) {
+            btn.onclick = null;
+            btn.classList.remove('mam-hover-scale');
+            btn.innerHTML = `<img src="${icons.load}" style="width: 14px; height: 14px; display: block;">`;
+            btn.title = "Validating upload history...";
+
+            const postTd = document.getElementById(`postID${pid}`);
+            const headerTd = document.querySelector(`td[data-pid="${pid}"]`);
+            const authorLink = headerTd ? headerTd.querySelector('a[href^="/u/"]') : null;
+
+            if (!postTd || !authorLink) {
+                this.setResult(btn, icons.error, "Failed to parse author or post.");
+                return;
+            }
+
+            const authorUid = authorLink.getAttribute('href').split('/u/')[1];
+
+            const aTags = postTd.querySelectorAll('a[href*="/t/"]');
+            let claimedTid = null;
+            for (const a of aTags) {
+                const match = a.getAttribute('href').match(/\/t\/(\d+)/);
+                if (match) {
+                    claimedTid = match[1];
+                    break;
+                }
+            }
+
+            if (!claimedTid) {
+                this.setResult(btn, icons.error, "No torrent link found in post.");
+                return;
+            }
+
+            try {
+                await Engine.enforceRateLimit(2000, 'background');
+
+                const formData = new URLSearchParams();
+                formData.append('tor[uploader]', `u${authorUid}`);
+                formData.append('com[sortType]', 'dateAsc');
+                formData.append('searchType', 'Torrents');
+                formData.append('perPage', '20');
+
+                const res = await fetch('/tor/json/search.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'Accept': 'application/json, text/javascript, */*; q=0.01'
+                    },
+                    body: formData
+                });
+
+                if (!res.ok) throw new Error("API Failure");
+                const json = await res.json();
+
+                if (!json.data || json.data.length === 0) {
+                    this.setResult(btn, icons.error, "User has no uploads or uploads are hidden.");
+                    return;
+                }
+
+                const oldestUpload = json.data[0];
+
+                let ownerId = null;
+                try {
+                    const ownershipArray = JSON.parse(oldestUpload.ownership);
+                    ownerId = ownershipArray[0];
+                } catch(e) {}
+
+                if (ownerId && ownerId.toString() !== authorUid.toString()) {
+                    this.setResult(btn, icons.error, "API failed to filter by uploader. Aborting safety check.");
+                    return;
+                }
+
+                if (oldestUpload.id.toString() !== claimedTid.toString()) {
+                    this.setResult(btn, icons.error, `Failed: Not their first upload. (Oldest is ID ${oldestUpload.id})`);
+                    return;
+                }
+
+                const seeders = parseInt(oldestUpload.seeders, 10) || 0;
+                const snatches = parseInt(oldestUpload.times_completed, 10) || 0;
+
+                if (seeders < 1) {
+                    this.setResult(btn, icons.error, "Failed: Torrent is not currently seeding.");
+                    return;
+                }
+                if (snatches < 1) {
+                    this.setResult(btn, icons.error, "Failed: Torrent has zero snatches.");
+                    return;
+                }
+
+                const haveSnatched = !!oldestUpload.my_snatched;
+                const isFree = (oldestUpload.free == 1 || oldestUpload.vip == 1 || oldestUpload.fl_vip == 1 || oldestUpload.personal_freeleech == 1);
+                const dlKey = json.dlKey || "";
+
+                ThreadDB.markVerified1st(pid, claimedTid, dlKey, haveSnatched, isFree);
+                this.morphNextState(btn, pid, claimedTid, dlKey, haveSnatched, isFree, giftContainer);
+
+            } catch (e) {
+                this.setResult(btn, icons.error, `API Error: ${e.message}`);
+            }
+        },
+        morphNextState(btn, pid, tid, dlKey, haveSnatched, isFree, container) {
+            // Fallback parse if injected from an old cache load missing the tid
+            let targetTid = tid;
+            if (!targetTid) {
+                const postTd = document.getElementById(`postID${pid}`);
+                const aTags = postTd?.querySelectorAll('a[href*="/t/"]');
+                for (const a of (aTags || [])) {
+                    const match = a.getAttribute('href').match(/\/t\/(\d+)/);
+                    if (match) { targetTid = match[1]; break; }
+                }
+            }
+
+            if (!haveSnatched) {
+                btn.classList.add('mam-hover-scale');
+                btn.innerHTML = `<img src="${icons.data}" style="width: 14px; height: 14px; display: block;">`;
+                btn.title = "Create snatch link (FL/Ratio)";
+                btn.style.cursor = 'pointer';
+
+                btn.onclick = (e) => {
+                    e.preventDefault();
+                    if (!targetTid) return alert("Could not locate Torrent ID in post.");
+
+                    let useFl = false;
+                    if (!isFree) {
+                        const input = window.prompt("This torrent uses ratio.\n\nType 'FL' to use a Freeleech Wedge.\nLeave blank and click OK to use Normal Ratio.\n(Click Cancel to abort)");
+                        if (input === null) return;
+                        if (input.trim().toUpperCase() === 'FL') useFl = true;
+                    }
+
+                    const baseUrl = dlKey ? `/tor/download.php/${dlKey}?tid=${targetTid}` : `/tor/download.php?tid=${targetTid}`;
+                    const url = `${baseUrl}${useFl ? '&fl' : ''}`;
+
+                    btn.onclick = null;
+                    btn.title = "Download Torrent";
+
+                    // Inject the real physical link, tinting the icon green so the user knows it changed states
+                    btn.innerHTML = `<a href="${url}" style="display: block; width: 100%; height: 100%;"><img src="${icons.data}" style="width: 14px; height: 14px; display: block; filter: hue-rotate(240deg) saturate(2);"></a>`;
+
+                    const aTag = btn.querySelector('a');
+                    aTag.onclick = () => {
+                        Logger.log(`${logIcon('check', 13)} Torrent downloaded.`);
+                        ThreadDB.markVerified1st(pid, targetTid, dlKey, true, isFree);
+
+                        // Delay morphing slightly to ensure the browser registers the click on the <a> tag
+                        setTimeout(() => {
+                            this.morphNextState(btn, pid, targetTid, dlKey, true, isFree, container);
+                        }, 150);
+                    };
+                };
+            } else {
+                btn.classList.add('mam-hover-scale');
+                btn.innerHTML = `<img src="${icons.gift}" style="width: 14px; height: 14px; display: block; filter: hue-rotate(240deg) saturate(2);">`;
+                btn.title = "Send 5000 BP via Torrent Thanks API";
+                btn.style.cursor = 'pointer';
+
+                btn.onclick = async (e) => {
+                    e.preventDefault();
+                    if (!targetTid) return alert("Could not locate Torrent ID in post.");
+
+                    const headerTd = document.querySelector(`td[data-pid="${pid}"]`);
+                    const authorLink = headerTd ? headerTd.querySelector('a[href^="/u/"]') : null;
+                    const username = authorLink ? authorLink.textContent.trim() : "User";
+
+                    const amountStr = window.prompt(`Enter Points to send ${username} via Torrent Thanks (Must be multiple of 50):`, "5000");
+                    if (!amountStr) return;
+
+                    const amount = parseInt(amountStr, 10);
+                    if (isNaN(amount) || amount < 50 || amount > 5000 || amount % 50 !== 0) {
+                        return alert("Invalid amount. Must be 50-5000 and a multiple of 50.");
+                    }
+
+                    btn.onclick = null;
+                    btn.classList.remove('mam-hover-scale');
+                    btn.innerHTML = `<img src="${icons.load}" style="width: 14px; height: 14px; display: block;">`;
+
+                    try {
+                        await Engine.enforceRateLimit(2000);
+                        const resp = await fetch(`/json/bonusBuy.php?spendtype=thanks&tid=${targetTid}&points=${amount}`);
+                        const data = await resp.json();
+                        Engine.lastApiCall = Date.now();
+
+                        if (data.success) {
+                            Logger.log(`${logIcon('check', 13)} Sent ${amount} BP Thanks to ${username}!`);
+                            ThreadDB.markThanked(pid);
+                            this.setResult(btn, icons.check, "Passed & Thanked");
+
+                            if (authorLink) {
+                                authorLink.style.setProperty('color', '#5EB9FF', 'important');
+                                authorLink.style.fontWeight = 'bold';
+                            }
+                        } else {
+                            alert(`Error: ${data.error}`);
+                            Logger.log(`${logIcon('error', 13)} Thanks API Error: ${data.error}`);
+                            this.morphNextState(btn, pid, targetTid, dlKey, haveSnatched, isFree, container);
+                        }
+                    } catch (err) {
+                        Logger.log(`${logIcon('error', 13)} Network error sending Thanks.`);
+                        this.morphNextState(btn, pid, targetTid, dlKey, haveSnatched, isFree, container);
+                    }
+                };
+            }
+        },
+        setResult(btn, iconUrl, msg) {
+            btn.innerHTML = `<img src="${iconUrl}" style="width: 14px; height: 14px; display: block;">`;
+            btn.title = msg;
+            btn.style.cursor = 'default';
+        }
+    };
+
     const ForumManager = {
         init() {
             if (window.location.pathname.startsWith('/f/t/')) {
@@ -2568,14 +2879,83 @@
         }
     };
 
+    const NotificationManager = {
+        init() {
+            this.bindOptimisticClicks();
+            this.checkUrlTriggers();
+        },
+        bindOptimisticClicks() {
+            const map = [
+                { selectors: ['#pmMess'], type: 'pm' },
+                { selectors: ['#topicWatch', 'a[href^="/forums/subscriptions.php/newPosts"]'], type: 'topic' },
+                { selectors: ['#ticketWatch'], type: 'ticket' },
+                { selectors: ['#requestWatch'], type: 'request' }
+            ];
+
+            map.forEach(group => {
+                group.selectors.forEach(sel => {
+                    document.querySelectorAll(sel).forEach(el => {
+                        el.addEventListener('click', () => this.clearNotif(group.type));
+                        el.addEventListener('auxclick', (e) => { if(e.button === 1) this.clearNotif(group.type); });
+                    });
+                });
+            });
+        },
+        checkUrlTriggers() {
+            const path = window.location.pathname;
+            const search = window.location.search;
+
+            if (path === '/messages.php' && search.includes('action=viewmailbox')) {
+                this.clearNotif('pm');
+            } else if (path === '/forums/subscriptions.php/newPosts') {
+                this.clearNotif('topic');
+            } else if (path === '/ticket.php/myTickets') {
+                this.clearNotif('ticket');
+            } else if (path === '/tor/requests.php' && search.includes('tor[viewType]=vfn')) {
+                this.clearNotif('request');
+            }
+        },
+        clearNotif(type) {
+            this.hideLocal(type);
+            StateManager.broadcast('NOTIF_CLEARED', { type });
+        },
+        hideLocal(type) {
+            const hideElements = (selectors) => {
+                selectors.forEach(sel => {
+                    document.querySelectorAll(sel).forEach(el => {
+                        el.classList.add('hideMe');
+                        el.style.setProperty('display', 'none', 'important');
+                    });
+                });
+            };
+
+            switch(type) {
+                case 'pm':
+                    hideElements(['#pmMess']);
+                    break;
+                case 'topic':
+                    hideElements(['#topicWatch', 'a[href^="/forums/subscriptions.php/newPosts"]']);
+                    break;
+                case 'ticket':
+                    hideElements(['#ticketWatch']);
+                    break;
+                case 'request':
+                    hideElements(['#requestWatch']);
+                    break;
+            }
+        }
+    };
+
     // Initialize Subsystems (State MUST load before Tweaks)
     Thread.init();
     StateManager.init();
     PageTweaks.init();
     DailiesManager.init();
+    NotificationManager.init();
     ShoutboxManager.init();
     ForumManager.init();
     ForumVerifier.init();
+    FirstUploadVerifier.init();
     Engine.initHeartbeat();
     AuditLogger.render();
     DailyTracker.updateUI();
@@ -2779,8 +3159,8 @@
                     }
                 }, 4000);
             } else if (btnWipe.textContent === 'Sure?') {
-                GM_setValue(Database.key, JSON.stringify({ uids: {}, legacy: {}, archived: 0 }));
-                Database.cache = { uids: {}, legacy: {}, archived: 0 };
+                GM_setValue(Database.key, JSON.stringify({ uids: {}, legacy: {}, invalid: {}, archived: 0 }));
+                Database.cache = { uids: {}, legacy: {}, invalid: {}, archived: 0 };
                 window.dispatchEvent(new CustomEvent('mam-db-updated'));
                 QueueManager.markGiftedUI();
 
@@ -2886,11 +3266,14 @@
                 try {
                     const releases = JSON.parse(response.responseText);
                     if (releases && releases.length > 0) {
-                        const data = releases[0];
-                        const bodyText = data.body || "*No release notes provided.*";
-                        // Strip markdown hashes and convert bullet points for clean UI rendering
-                        const formatted = bodyText.replace(/\r\n/g, '<br>').replace(/^- /gm, '• ').replace(/#/g, '');
-                        content.innerHTML = `<div style="color: #5EB9FF; font-weight: bold; margin-bottom: 6px; font-size: 12px;">${data.name || data.tag_name}</div><div style="color: var(--mam-text);">${formatted}</div>`;
+                        let htmlOut = '';
+                        releases.forEach(data => {
+                            const bodyText = data.body || "*No release notes provided.*";
+                            // Strip markdown hashes and convert bullet points for clean UI rendering
+                            const formatted = bodyText.replace(/\r\n/g, '<br>').replace(/^- /gm, '• ').replace(/#/g, '');
+                            htmlOut += `<div style="margin-bottom: 14px;"><div style="color: #5EB9FF; font-weight: bold; margin-bottom: 6px; font-size: 12px;">${data.name || data.tag_name}</div><div style="color: var(--mam-text);">${formatted}</div></div>`;
+                        });
+                        content.innerHTML = htmlOut;
                     } else {
                         content.innerHTML = '<div style="color: var(--mam-text-muted); text-align: center; margin-top: 20px;">No release notes found.</div>';
                     }
@@ -2940,6 +3323,10 @@
     panel.addEventListener('click', (e) => {
         if (panel.classList.contains('minimized')) {
             panel.classList.remove('minimized');
+            // Wait for 0.2s CSS dimensional transition to finish before snapping to the latest log
+            setTimeout(() => {
+                if (Logger.el) Logger.el.scrollTop = Logger.el.scrollHeight;
+            }, 210);
         }
     });
 
