@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.0.8
+// @version      3.1
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -709,12 +709,16 @@
     };
 
     const WakeLock = {
+        isAcquired: false,
         screenLock: null,
         pc1: null,
         pc2: null,
         heartbeatTimer: null,
 
         async acquire() {
+            if (this.isAcquired) return;
+            this.isAcquired = true;
+
             if ('wakeLock' in navigator) {
                 try {
                     this.screenLock = await navigator.wakeLock.request('screen');
@@ -749,6 +753,7 @@
         },
 
         release() {
+            this.isAcquired = false;
             if (this.screenLock) {
                 this.screenLock.release();
                 this.screenLock = null;
@@ -1448,15 +1453,22 @@
             this.heartbeatActive = true;
             while (this.heartbeatActive) {
                 const elapsed = Date.now() - this.lastHeartbeat;
-                const targetInterval = 15 * 60 * 1000;
+                const buyEnabled = StateManager.state.config.buyAmount !== 'Off';
+                const vipEnabled = StateManager.state.config.storeAutomations.includes('VIP');
+
+                const targetInterval = buyEnabled ? (15 * 60 * 1000) : (24 * 60 * 60 * 1000);
+
+                if (!StateManager.state.isRunning) {
+                    if (buyEnabled || vipEnabled) WakeLock.acquire();
+                    else WakeLock.release();
+                }
 
                 if (elapsed >= targetInterval) {
-                    if ((StateManager.state.config.buyAmount !== 'Off' || StateManager.state.config.storeAutomations.includes('VIP')) && !StateManager.state.isRunning) {
+                    if ((buyEnabled || vipEnabled) && !StateManager.state.isRunning) {
                         await this.triggerHeartbeat();
-                        this.lastHeartbeat = Date.now();
-                    } else {
-                        this.lastHeartbeat = Date.now();
                     }
+                    this.lastHeartbeat = Date.now();
+                    GM_setValue('mam_last_heartbeat', this.lastHeartbeat.toString());
                 }
                 // Continually check delta every 5 seconds via unthrottled worker
                 await Thread.sleep(5000);
@@ -1464,7 +1476,11 @@
         },
 
         initHeartbeat() {
-            this.lastHeartbeat = Date.now();
+            this.lastHeartbeat = parseInt(GM_getValue('mam_last_heartbeat', '0'), 10);
+            if (this.lastHeartbeat === 0) {
+                this.lastHeartbeat = Date.now();
+                GM_setValue('mam_last_heartbeat', this.lastHeartbeat.toString());
+            }
             if (!this.heartbeatActive) this.heartbeatLoop();
         },
 
@@ -1764,7 +1780,8 @@
                 Logger.log(abortReason);
                 if (abortReason.includes("daily limit")) {
                     finalColor = '#E74C3C'; // Red
-                    shouldClear = false; // Hold the partial progress bar
+                    StateManager.state.progress = 100; // Snap to 100% fill to mimic completion
+                    shouldClear = false; // Hold the progress bar
                 }
             } else if (abortReason === "stopped") {
                 Logger.log(`${logIcon('stop')} Stopped.`);
@@ -2500,8 +2517,17 @@
             if (StateManager.state.config.socialGifting.includes('Forum')) {
                 this.injectButtons();
             } else {
-                document.querySelectorAll('.mam-verify-1st-btn').forEach(btn => btn.remove());
+                this.removeButtons();
             }
+        },
+        removeButtons() {
+            document.querySelectorAll('.mam-verify-1st-btn').forEach(btn => btn.remove());
+            document.querySelectorAll('td.colhead[data-pid] a[href^="/u/"]').forEach(a => {
+                if (a.style.color === 'rgb(94, 185, 255)' || a.style.color === '#5EB9FF') {
+                    a.style.removeProperty('color');
+                    a.style.removeProperty('font-weight');
+                }
+            });
         },
         injectButtons() {
             document.querySelectorAll('td[data-pid][align="right"]').forEach(td => {
@@ -2961,7 +2987,7 @@
     DailyTracker.updateUI();
 
     // Check store queue on F5/Page Load if condition is met
-    if ((StateManager.state.config.buyAmount !== 'Off' || StateManager.state.config.storeAutomations.includes('VIP')) && StateManager.state.currentBP !== null && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
+    if (StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP !== null && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
         Engine.triggerHeartbeat();
     }
 
