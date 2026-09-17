@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.1
+// @version      3.1.2
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -50,7 +50,7 @@
 (function() {
     'use strict';
 
-    // Shadow fetch to ensure Firefox-based extension contexts resolve relative URLs against the site origin
+// Shadow fetch to ensure Firefox-based extension contexts resolve relative URLs against the site origin
     const originalFetch = window.fetch;
     const fetch = (resource, options) => {
         if (typeof resource === 'string' && resource.startsWith('/')) {
@@ -58,6 +58,47 @@
         }
         return originalFetch(resource, options);
     };
+
+    // Inject interceptors directly into the native page context to bypass Tampermonkey sandbox isolation
+    const interceptScript = document.createElement('script');
+    interceptScript.textContent = `
+        (function() {
+            // 1. Intercept jQuery AJAX (Legacy MAM native behavior)
+            if (typeof $ !== 'undefined') {
+                $(document).ajaxComplete(function(event, xhr, settings) {
+                    if (settings.url && settings.url.includes('/json/bonusBuy.php') && settings.url.includes('spendtype=gift') && settings.url.includes('giftTo=')) {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            if (data && data.success && data.to) {
+                                window.dispatchEvent(new CustomEvent('mam-native-gift-sent', { detail: { uid: data.to, name: data.toName || 'User', data: data } }));
+                            }
+                        } catch(e) {}
+                    }
+                });
+            }
+
+            // 2. Intercept native fetch (Future-proofing for site updates)
+            const origFetch = window.fetch;
+            window.fetch = async function(resource, options) {
+                const response = await origFetch.apply(this, arguments);
+                let urlStr = typeof resource === 'string' ? resource : (resource instanceof Request ? resource.url : '');
+
+                if (urlStr.includes('/json/bonusBuy.php') && urlStr.includes('spendtype=gift') && urlStr.includes('giftTo=')) {
+                    try {
+                        const clonedRes = response.clone();
+                        clonedRes.json().then(data => {
+                            if (data && data.success && data.to) {
+                                window.dispatchEvent(new CustomEvent('mam-native-gift-sent', { detail: { uid: data.to, name: data.toName || 'User', data: data } }));
+                            }
+                        }).catch(() => {});
+                    } catch(e) {}
+                }
+                return response;
+            };
+        })();
+    `;
+    document.body.appendChild(interceptScript);
+    interceptScript.remove();
 
     // Prevent Tampermonkey from double-executing the script inside hidden iframes
     if (window.top !== window.self) return;
@@ -543,6 +584,13 @@
                         <div class="mam-segment" data-val="Other">Other</div>
                     </div>
                 </div>
+                <div class="mam-setting-row">
+                    <span class="mam-label-text">Hide:</span>
+                    <div class="mam-segment-grid" id="mam-cfg-auto-hide" style="width: 80px;">
+                        <div class="mam-segment" data-val="Index">Index</div>
+                        <div class="mam-segment" data-val="Other">Other</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -789,6 +837,7 @@
                 storeAutomations: ['Vault', 'Lotto'],
                 uiPosition: 'bottom-right',
                 autoMinimize: [],
+                autoHide: [],
                 hideNews: 'Off',
                 compactLayout: false,
                 supportLinks: 'Off',
@@ -851,6 +900,7 @@
                 storeAutomations: '["Vault", "Lotto"]',
                 uiPosition: 'bottom-right',
                 autoMinimize: '[]',
+                autoHide: '[]',
                 hideNews: 'Off',
                 compactLayout: false,
                 supportLinks: 'Off'
@@ -867,6 +917,11 @@
                 this.state.config.autoMinimize = typeof stored.autoMinimize === 'string' ? JSON.parse(stored.autoMinimize) : stored.autoMinimize;
             } catch (e) {
                 this.state.config.autoMinimize = [];
+            }
+            try {
+                this.state.config.autoHide = typeof stored.autoHide === 'string' ? JSON.parse(stored.autoHide) : stored.autoHide;
+            } catch (e) {
+                this.state.config.autoHide = [];
             }
             this.state.config.hideNews = stored.hideNews;
             this.state.config.compactLayout = stored.compactLayout;
@@ -1083,6 +1138,13 @@
             this.load();
             if (userId) this.cache.invalid[userId] = Date.now();
             this.save();
+        },
+        removeInvalid(userId) {
+            this.load();
+            if (userId && this.cache.invalid[userId]) {
+                delete this.cache.invalid[userId];
+                this.save();
+            }
         },
         has(userId, username = null) {
             this.load();
@@ -1809,14 +1871,32 @@
             this.applyHideNews(StateManager.state.config.hideNews);
             this.applyPosition(StateManager.state.config.uiPosition);
             this.applyAutoMinimize(StateManager.state.config.autoMinimize);
+            this.applyAutoHide(StateManager.state.config.autoHide);
             this.applySupportLinks(StateManager.state.config.supportLinks);
 
             window.addEventListener('mam-config-updated', (e) => {
                 if (e.detail.key === 'compactLayout') this.applyCompactLayout(e.detail.value);
                 if (e.detail.key === 'hideNews') this.applyHideNews(e.detail.value);
                 if (e.detail.key === 'uiPosition') this.applyPosition(e.detail.value);
+                if (e.detail.key === 'autoHide') this.applyAutoHide(e.detail.value);
                 if (e.detail.key === 'supportLinks') this.applySupportLinks(e.detail.value);
             });
+        },
+
+        applyAutoHide(configArr = []) {
+            const path = window.location.pathname;
+            const isIndex = path === '/' || path === '/index.php';
+            const isNew = path === '/newUsers.php';
+            const isOther = !isIndex && !isNew;
+
+            const panel = document.getElementById('mam-gift-panel');
+            if (!panel) return;
+
+            if ((isIndex && configArr.includes('Index')) || (isOther && configArr.includes('Other'))) {
+                panel.style.setProperty('display', 'none', 'important');
+            } else {
+                panel.style.removeProperty('display');
+            }
         },
 
         applySupportLinks(mode) {
@@ -2972,6 +3052,82 @@
         }
     };
 
+    const UserPageManager = {
+        init() {
+            if (!window.location.pathname.startsWith('/u/')) return;
+
+            const uidMatch = window.location.pathname.match(/\/u\/(\d+)/) || (document.querySelector('input[name="uid"]') && [null, document.querySelector('input[name="uid"]').value]);
+            const uid = uidMatch ? uidMatch[1] : null;
+
+            // 1. Revalidation: If user is marked invalid but is no longer disabled on-page, un-disable them
+            if (uid && Database.hasInvalid(uid)) {
+                const disabledImg = document.querySelector('img[src*="disabledbig.gif"]');
+                const disabledText = document.body.textContent.includes('This account has been disabled');
+
+                if (!disabledImg && !disabledText) {
+                    Database.removeInvalid(uid);
+                    Logger.log(`${logIcon('refresh', 13)} UID ${uid} reinstated. Removed from invalid list.`);
+                }
+            }
+
+            // 2. Profile Gifting Sync: Hijack native button to route through GiftMAM state
+            const sendPointsBtn = document.getElementById('sendPointsDetailP');
+            const giftIdInput = document.getElementById('giftid');
+            const giftUserInput = document.getElementById('giftusername');
+            const bonusGiftInput = document.getElementById('bonusgift');
+
+            if (sendPointsBtn && giftIdInput) {
+                sendPointsBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+
+                    const targetUid = giftIdInput.value;
+                    const targetName = giftUserInput ? giftUserInput.value : 'User';
+                    const amount = bonusGiftInput ? (parseInt(bonusGiftInput.value, 10) || 100) : 100;
+
+                    if (!DailyTracker.canGift()) {
+                        Logger.log(`${logIcon('stop', 13)} Server daily limit reached.`);
+                        return;
+                    }
+
+                    try {
+                        await Engine.enforceRateLimit(2000);
+                        const resp = await fetch(`/json/bonusBuy.php?spendtype=gift&amount=${amount}&giftTo=${targetUid}`);
+                        const data = await resp.json();
+                        Engine.lastApiCall = Date.now();
+
+                        if (data.success) {
+                            Logger.log(`${logIcon('check', 13)} ${amount} BP to ${targetName}`);
+                            DailyTracker.increment();
+
+                            if (data.seedbonus !== undefined) {
+                                StateManager.updateBP(parseInt(data.seedbonus, 10));
+                            }
+
+                            // Cross-reference with active queue: mark gifted and prune
+                            Database.add(targetUid, targetName);
+                            QueueManager.users = QueueManager.users.filter(u => u.id !== targetUid);
+                            QueueManager.markGiftedUI();
+                            updateStatsCount();
+
+                            // Trigger site's native post-gift feedback if container exists
+                            sendPointsBtn.textContent = ' (Sent!)';
+                            setTimeout(() => { sendPointsBtn.textContent = ' Points'; }, 2500);
+                        } else {
+                            let errStr = data.error || '';
+                            if (errStr.toLowerCase().includes("100 gifts") || errStr.toLowerCase().includes("resume tomorrow") || errStr.toLowerCase().includes("max gifts") || errStr.toLowerCase().includes("token")) {
+                                DailyTracker.setCapReached();
+                            }
+                            Logger.log(`${logIcon('error', 13)} ${targetName}: ${errStr}`);
+                        }
+                    } catch (err) {
+                        Logger.log(`${logIcon('error', 13)} Network error sending gift to ${targetName}.`);
+                    }
+                }, true);
+            }
+        }
+    };
+
     // Initialize Subsystems (State MUST load before Tweaks)
     Thread.init();
     StateManager.init();
@@ -2982,6 +3138,7 @@
     ForumManager.init();
     ForumVerifier.init();
     FirstUploadVerifier.init();
+    UserPageManager.init();
     Engine.initHeartbeat();
     AuditLogger.render();
     DailyTracker.updateUI();
@@ -3004,6 +3161,23 @@
         }
     };
     window.addEventListener('mam-db-updated', updateStatsCount);
+
+    window.addEventListener('mam-native-gift-sent', (e) => {
+        const { uid, name, data } = e.detail;
+
+        // Unconditionally add to the database so they are recognized globally
+        Database.add(uid, name);
+
+        // Remove from the active visual queue if they happen to be in it
+        QueueManager.users = QueueManager.users.filter(u => u.id !== uid);
+        QueueManager.markGiftedUI();
+        updateStatsCount();
+
+        if (data.seedbonus !== undefined) {
+            StateManager.updateBP(parseInt(data.seedbonus, 10));
+        }
+        Logger.log(`${logIcon('check', 13)} Native gift synced: ${name}`);
+    });
 
     // Apply persistent visual states on page load and watch for native site AJAX updates
     QueueManager.markGiftedUI();
@@ -3108,6 +3282,7 @@
     };
 
     bindMultiSegment('mam-cfg-auto-minimize', 'autoMinimize');
+    bindMultiSegment('mam-cfg-auto-hide', 'autoHide');
     bindMultiSegment('mam-cfg-social-gifting', 'socialGifting');
     bindMultiSegment('mam-cfg-store-automations', 'storeAutomations');
 
