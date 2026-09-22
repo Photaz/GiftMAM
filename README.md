@@ -1,7 +1,7 @@
 # 🎁 GiftMAM
 
 **Gift Many A Mouse: Reforged**  
-A modern, lightweight userscript designed to streamline the gifting and sharing experience on MyAnonamouse.
+A modern, lightweight userscript designed to streamline the gifting and sharing experience on MAM.
 
 ## ✨ Features
 
@@ -18,7 +18,5 @@ A modern, lightweight userscript designed to streamline the gifting and sharing 
 1. Ensure you have a userscript manager installed (such as [Tampermonkey](https://www.tampermonkey.net/)).
 2. [Click here to install GiftMAM](https://github.com/Photaz/GiftMAM/raw/main/GiftMAM.user.js).
 3. Refresh MyAnonamouse to access the new panel.
-
-## 📦 Latest Updates (v3.0.x)
 
 GiftMAM has been completely reforged from the ground up. This major version introduces a robust modular architecture, dynamic `color-mix()` adaptive theming, UID-based history tracking, and an entirely new vector-based interface.
