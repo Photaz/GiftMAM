@@ -1,7 +1,7 @@
-// ==UserScript==
+​// ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.1.2
+// @version      3.1.4
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -45,9 +45,10 @@
 // @resource     iconError https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/error.svg
 // @resource     iconCheck https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/check.svg
 // @connect      api.github.com
+// @connect      raw.githubusercontent.com
 // ==/UserScript==
 
-(function() {
+(async function() {
     'use strict';
 
 // Shadow fetch to ensure Firefox-based extension contexts resolve relative URLs against the site origin
@@ -604,10 +605,9 @@
                     <span class="mam-label-text">Hide News:</span>
                     <div style="display: flex; gap: 6px; align-items: center;">
                         <button id="btn-reset-news" class="mam-emoji mam-hover-opacity" title="Reset Dismissed News" style="background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center;"><img src="${icons.reset}" style="width: 18px; height: 18px;"></button>
-                        <div class="mam-segment-grid" id="mam-cfg-hide-news" style="width: 90px;">
+                        <div class="mam-segment-grid" id="mam-cfg-hide-news" style="width: 80px;">
                             <div class="mam-segment" data-val="Off">Off</div>
                             <div class="mam-segment" data-val="Click">Click</div>
-                            <div class="mam-segment" data-val="Hide">Hide</div>
                         </div>
                     </div>
                 </div>
@@ -710,12 +710,6 @@
             <button class="mam-btn-run mam-emoji" id="btn-run" title="Start Gifting"><img src="${icons.gift}" style="width: 16px; height: 16px; vertical-align: middle;"></button>
         </div>
     `;
-
-    const panel = document.createElement('div');
-    panel.id = 'mam-gift-panel';
-    panel.innerHTML = panelHTML;
-    document.body.appendChild(panel);
-
 
     // ==========================================
     // 3. CORE SYSTEMS, STATE & CONCURRENCY
@@ -923,7 +917,7 @@
             } catch (e) {
                 this.state.config.autoHide = [];
             }
-            this.state.config.hideNews = stored.hideNews;
+            this.state.config.hideNews = stored.hideNews === 'Hide' ? 'Click' : stored.hideNews;
             this.state.config.compactLayout = stored.compactLayout;
             this.state.config.supportLinks = stored.supportLinks;
 
@@ -944,6 +938,8 @@
 
             if (scrapedBP !== null && !isNaN(scrapedBP)) {
                 this.updateBP(scrapedBP);
+                // Reset heartbeat schedule since organic navigation provided fresh DOM balance
+                GM_setValue('mam_last_heartbeat', Date.now().toString());
             } else if (cachedBP !== -1) {
                 this.updateBP(cachedBP);
             }
@@ -1050,15 +1046,19 @@
     const Logger = {
         history: [],
         max: 50,
-        el: document.querySelector('.mam-log-container'),
+        get el() {
+            return document.querySelector('.mam-log-container');
+        },
         log(msg) {
             const ts = new Date().toTimeString().split(' ')[0];
             this.history.push(`[${ts}] ${msg}`);
             if (this.history.length > this.max) this.history.shift();
 
-            // Map array to DOM once per update
-            this.el.innerHTML = this.history.map(entry => `<div>${entry}</div>`).join('');
-            this.el.scrollTop = this.el.scrollHeight;
+            const container = this.el;
+            if (container) {
+                container.innerHTML = this.history.map(entry => `<div>${entry}</div>`).join('');
+                container.scrollTop = container.scrollHeight;
+            }
         }
     };
 
@@ -1539,8 +1539,9 @@
 
         initHeartbeat() {
             this.lastHeartbeat = parseInt(GM_getValue('mam_last_heartbeat', '0'), 10);
-            if (this.lastHeartbeat === 0) {
-                this.lastHeartbeat = Date.now();
+            const now = Date.now();
+            if (this.lastHeartbeat === 0 || this.lastHeartbeat > now) {
+                this.lastHeartbeat = now;
                 GM_setValue('mam_last_heartbeat', this.lastHeartbeat.toString());
             }
             if (!this.heartbeatActive) this.heartbeatLoop();
@@ -2012,12 +2013,6 @@
             if (mode === 'Off') return;
 
             if (fpTime) fpTime.style.display = 'none';
-
-            if (mode === 'Hide') {
-                if (newsHeader) newsHeader.style.display = 'none';
-                newsItems.forEach(item => item.style.display = 'none');
-                return;
-            }
 
             if (mode === 'Click') {
                 const dismissedNewsKey = 'mam_dismissed_news';
@@ -3127,6 +3122,69 @@
             }
         }
     };
+
+    const KillSwitch = {
+        url: 'https://raw.githubusercontent.com/Photaz/GiftMAM/main/config/status.json',
+        cacheKey: 'mam_killswitch_status',
+        lastCheckKey: 'mam_killswitch_last_check',
+        checkInterval: 24 * 60 * 60 * 1000,
+
+        async check() {
+            const now = Date.now();
+            const lastCheck = parseInt(GM_getValue(this.lastCheckKey, '0'), 10);
+            let status = null;
+
+            try {
+                status = JSON.parse(GM_getValue(this.cacheKey, 'null'));
+            } catch (e) {}
+
+            if (!status || (now - lastCheck) > this.checkInterval) {
+                try {
+                    const res = await new Promise((resolve, reject) => {
+                        GM_xmlhttpRequest({
+                            method: 'GET',
+                            url: `${this.url}?_t=${now}`,
+                            timeout: 5000,
+                            onload: (r) => (r.status === 200 ? resolve(r.responseText) : reject()),
+                            onerror: reject,
+                            ontimeout: reject
+                        });
+                    });
+
+                    status = JSON.parse(res);
+                    GM_setValue(this.cacheKey, JSON.stringify(status));
+                    GM_setValue(this.lastCheckKey, now.toString());
+                } catch (e) {
+                    status = status || { disabled: false };
+                }
+            }
+
+            if (status && status.disabled) {
+                this.kill(status.reason || 'GiftMAM has been sunset by the developer.');
+                return true;
+            }
+
+            return false;
+        },
+
+        kill(reason) {
+            const panelEl = document.getElementById('mam-gift-panel');
+            if (panelEl) panelEl.remove();
+
+            if (typeof StateManager !== 'undefined') StateManager.releaseExecutionLock();
+            if (typeof WakeLock !== 'undefined') WakeLock.release();
+
+            console.warn(`[GiftMAM] Terminated: ${reason}`);
+        }
+    };
+
+    // Killswitch Gate: Terminate execution before mounting systems if remote disabled flag is active
+    if (await KillSwitch.check()) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'mam-gift-panel';
+    panel.innerHTML = panelHTML;
+    document.body.appendChild(panel);
 
     // Initialize Subsystems (State MUST load before Tweaks)
     Thread.init();
