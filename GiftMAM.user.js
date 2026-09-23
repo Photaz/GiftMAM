@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.1.5
+// @version      3.1.6
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -507,9 +507,9 @@
                 <div class="mam-section-header">
                     <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.gift}" style="width: 14px; height: 14px; vertical-align: middle;"></span> Gifting</div>
                     <div class="mam-section-header-right">
-                        <div id="mam-ui-daily-gifts" style="color: var(--mam-text); font-weight: normal; font-size: 10px; text-transform: none;">Daily Gifts: 0</div>
+                        <div id="mam-ui-daily-gifts" style="color: var(--mam-text); font-weight: normal; font-size: 10px; text-transform: none;">Today: 0 / 0</div>
                         <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
-                    </div>
+                </div>
                 </div>
                 <div class="mam-setting-row">
                     <label for="mam-cfg-amount" title="Accepts 5-1000 or 'Max'">Default Gift Amount:</label>
@@ -518,6 +518,10 @@
                 <div class="mam-setting-row">
                     <label for="mam-cfg-reserve">Minimum BP Reserve:</label>
                     <input type="number" id="mam-cfg-reserve" min="1000" max="999999">
+                </div>
+                <div class="mam-setting-row">
+                    <label for="mam-cfg-soft-cap" title="Max automated batch gifts per day (0 = Unlimited)">Daily Soft Limit:</label>
+                    <input type="number" id="mam-cfg-soft-cap" min="0" placeholder="0">
                 </div>
                 <div class="mam-setting-row">
                     <span class="mam-label-text">Social Gifting:</span>
@@ -602,13 +606,10 @@
                     <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
                 </div>
                 <div class="mam-setting-row">
-                    <span class="mam-label-text">Hide News:</span>
-                    <div style="display: flex; gap: 6px; align-items: center;">
+                    <label for="mam-cfg-hide-news">Click to Hide News:</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
                         <button id="btn-reset-news" class="mam-emoji mam-hover-opacity" title="Reset Dismissed News" style="background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center;"><img src="${icons.reset}" style="width: 18px; height: 18px;"></button>
-                        <div class="mam-segment-grid" id="mam-cfg-hide-news" style="width: 80px;">
-                            <div class="mam-segment" data-val="Off">Off</div>
-                            <div class="mam-segment" data-val="Click">Click</div>
-                        </div>
+                        <label class="mam-toggle"><input type="checkbox" id="mam-cfg-hide-news"><span class="mam-slider"></span></label>
                     </div>
                 </div>
                 <div class="mam-setting-row">
@@ -616,12 +617,8 @@
                     <label class="mam-toggle"><input type="checkbox" id="mam-cfg-compact"><span class="mam-slider"></span></label>
                 </div>
                 <div class="mam-setting-row">
-                    <span class="mam-label-text">Support Links Layout:</span>
-                    <div class="mam-segment-grid" id="mam-cfg-support-links" style="width: 110px;">
-                        <div class="mam-segment" data-val="Off">Off</div>
-                        <div class="mam-segment" data-val="Blend">Blend</div>
-                        <div class="mam-segment" data-val="Hide">Hide</div>
-                    </div>
+                    <label for="mam-cfg-support-links">Blend Support Links:</label>
+                    <label class="mam-toggle"><input type="checkbox" id="mam-cfg-support-links"><span class="mam-slider"></span></label>
                 </div>
             </div>
         </div>
@@ -825,6 +822,7 @@
             config: {
                 giftAmount: '100',
                 minReserve: 15000,
+                softCap: 0,
                 limit: 'ALL',
                 buyAmount: 'Off',
                 buyWhen: 65000,
@@ -832,9 +830,9 @@
                 uiPosition: 'bottom-right',
                 autoMinimize: [],
                 autoHide: [],
-                hideNews: 'Off',
+                hideNews: false,
                 compactLayout: false,
-                supportLinks: 'Off',
+                supportLinks: false,
                 socialGifting: ['Shoutbox', 'Forum']
             }
         },
@@ -888,6 +886,7 @@
             const stored = GM_getValues({
                 giftAmount: '100',
                 minReserve: 15000,
+                softCap: 0,
                 socialGifting: '["Shoutbox", "Forum"]',
                 buyAmount: 'Off',
                 buyWhen: 65000,
@@ -895,13 +894,14 @@
                 uiPosition: 'bottom-right',
                 autoMinimize: '[]',
                 autoHide: '[]',
-                hideNews: 'Off',
+                hideNews: false,
                 compactLayout: false,
-                supportLinks: 'Off'
+                supportLinks: false
             });
 
             this.state.config.giftAmount = stored.giftAmount;
             this.state.config.minReserve = parseInt(stored.minReserve, 10);
+            this.state.config.softCap = parseInt(stored.softCap, 10) || 0;
             try { this.state.config.socialGifting = JSON.parse(stored.socialGifting); } catch(e) { this.state.config.socialGifting = ['Shoutbox', 'Forum']; }
             this.state.config.buyAmount = stored.buyAmount;
             this.state.config.buyWhen = parseInt(stored.buyWhen, 10);
@@ -917,9 +917,9 @@
             } catch (e) {
                 this.state.config.autoHide = [];
             }
-            this.state.config.hideNews = stored.hideNews === 'Hide' ? 'Click' : stored.hideNews;
+            this.state.config.hideNews = stored.hideNews === true || stored.hideNews === 'Click' || stored.hideNews === 'Hide';
             this.state.config.compactLayout = stored.compactLayout;
-            this.state.config.supportLinks = stored.supportLinks;
+            this.state.config.supportLinks = stored.supportLinks === true || stored.supportLinks === 'Blend';
 
             // Scrape and initialize BP from native data attribute
             const domBP = document.getElementById('tmBP');
@@ -1016,18 +1016,44 @@
             }
         },
 
-        setExecutionUI(status) {
+        setExecutionUI(status = null) {
             const btn = document.getElementById('btn-run');
             if (!btn) return;
-            if (status === 'LOCKED') {
+
+            if (this.state.isRunning) {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.title = "Stop Gifting";
+                return;
+            }
+
+            const isLocked = status === 'LOCKED' || (!this.state.isLeader && this.state.leaderTabId !== null && this.state.leaderTabId !== this.myTabId);
+            if (isLocked) {
                 btn.disabled = true;
                 btn.style.opacity = '0.4';
                 btn.title = "Running in another tab";
-            } else if (status === 'IDLE') {
-                btn.disabled = false;
-                btn.style.opacity = '1';
-                btn.title = "Start Gifting";
+                return;
             }
+
+            if (typeof DailyTracker !== 'undefined') {
+                if (!DailyTracker.canGiftManual()) {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.4';
+                    btn.title = "Server daily limit reached";
+                    return;
+                }
+
+                if (!DailyTracker.canGiftBatch()) {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.4';
+                    btn.title = `Daily soft limit (${this.state.config.softCap}) reached`;
+                    return;
+                }
+            }
+
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.title = "Start Gifting";
         },
 
         updateProgressBar(percentage, color = '#3498DB') {
@@ -1251,38 +1277,70 @@
     const DailyTracker = {
         getKey() { return 'mam_daily_gifts_tracker'; },
         get() {
-            let data = { date: 0, count: 0, capped: false };
-            try { data = JSON.parse(GM_getValue(this.getKey(), '{"date":0,"count":0,"capped":false}')); } catch(e) {}
+            let data = { date: 0, totalCount: 0, batchCount: 0, capped: false };
+            try {
+                const raw = GM_getValue(this.getKey(), null);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    data = {
+                        date: parsed.date || 0,
+                        totalCount: parsed.totalCount !== undefined ? parsed.totalCount : (parsed.count || 0),
+                        batchCount: parsed.batchCount || 0,
+                        capped: !!parsed.capped
+                    };
+                }
+            } catch(e) {}
             const d = new Date();
             d.setUTCHours(0, 0, 0, 0);
             const midnight = d.getTime();
             if (data.date !== midnight) {
-                return { date: midnight, count: 0, capped: false };
+                return { date: midnight, totalCount: 0, batchCount: 0, capped: false };
             }
             return data;
         },
-        increment() {
+        increment(isBatch = false) {
             const data = this.get();
-            data.count += 1;
+            data.totalCount += 1;
+            if (isBatch) data.batchCount += 1;
             GM_setValue(this.getKey(), JSON.stringify(data));
             this.updateUI();
+            updateStatsCount();
         },
         setCapReached() {
             const data = this.get();
             data.capped = true;
             GM_setValue(this.getKey(), JSON.stringify(data));
             this.updateUI();
+            updateStatsCount();
         },
-        canGift() {
+        canGiftManual() {
             return !this.get().capped;
+        },
+        canGiftBatch() {
+            if (this.get().capped) return false;
+            const softCap = StateManager.state.config.softCap;
+            if (softCap > 0 && this.get().batchCount >= softCap) return false;
+            return true;
+        },
+        getRemainingBatch() {
+            const softCap = StateManager.state.config.softCap;
+            if (softCap <= 0) return Infinity;
+            return Math.max(0, softCap - this.get().batchCount);
         },
         updateUI() {
             const el = document.getElementById('mam-ui-daily-gifts');
             if (el) {
                 const data = this.get();
-                el.textContent = `Daily Gifts: ${data.count}${data.capped ? ' (Max)' : ''}`;
-                el.style.color = data.capped ? '#EF5350' : 'var(--mam-text)';
+                const softCap = StateManager.state.config.softCap;
+                if (softCap > 0) {
+                    el.textContent = `Today: ${data.batchCount}/${softCap} (Soft Limit) | ${data.totalCount} (Total)${data.capped ? ' [Max]' : ''}`;
+                    el.style.color = data.capped ? '#EF5350' : (data.batchCount >= softCap ? '#FFB74D' : 'var(--mam-text)');
+                } else {
+                    el.textContent = `Daily Gifts: ${data.totalCount}${data.capped ? ' (Max)' : ''}`;
+                    el.style.color = data.capped ? '#EF5350' : 'var(--mam-text)';
+                }
             }
+            StateManager.setExecutionUI();
         }
     };
 
@@ -1339,7 +1397,7 @@
                 foundUsers = Array.from(links).map(a => {
                     const href = a.getAttribute('href');
                     return { id: href ? href.split('/u/')[1] : null, name: a.innerText.trim().split(' ')[0] };
-                }).filter(u => u.id);
+                }).filter(u => u.id).reverse();
             } else {
                 // On secondary pages, hydrate the widget queue from memory so the UI isn't blank
                 const cached = GM_getValue('mam_queue_widget');
@@ -1440,7 +1498,7 @@
                             id: href ? href.split('/u/')[1] : null,
                             name: a.innerText.trim()
                         };
-                    }).filter(u => u.id);
+                    }).filter(u => u.id).reverse();
 
                     const siteContainer = document.getElementById('newestMembers');
                     if (siteContainer) {
@@ -1500,9 +1558,10 @@
             if (btn) {
                 btn.classList.remove('stopping');
             }
-            StateManager.broadcast('LEADER_RELEASE', { clearProgress, progress: StateManager.state.progress, color });
             StateManager.releaseExecutionLock();
             WakeLock.release();
+            StateManager.broadcast('LEADER_RELEASE', { clearProgress, progress: StateManager.state.progress, color });
+            StateManager.setExecutionUI();
         },
 
         stop() {
@@ -1648,14 +1707,21 @@
         async start() {
             if (StateManager.state.isRunning) return;
 
-            const hasLock = await StateManager.acquireExecutionLock();
-            if (!hasLock) {
-                Logger.log("Blocked: Another tab is actively gifting.");
+            if (!DailyTracker.canGiftManual()) {
+                Logger.log(`${logIcon('stop', 13)} Server daily limit reached.`);
+                StateManager.setExecutionUI();
                 return;
             }
 
-            if (!DailyTracker.canGift()) {
-                Logger.log(`${logIcon('stop', 13)} Server daily limit reached.`);
+            if (!DailyTracker.canGiftBatch()) {
+                Logger.log(`${logIcon('stop', 13)} Daily soft limit (${StateManager.state.config.softCap}) reached.`);
+                StateManager.setExecutionUI();
+                return;
+            }
+
+            const hasLock = await StateManager.acquireExecutionLock();
+            if (!hasLock) {
+                Logger.log("Blocked: Another tab is actively gifting.");
                 return;
             }
 
@@ -1663,9 +1729,16 @@
             let maxGifts = limitVal === 'ALL' ? QueueManager.users.length : parseInt(limitVal, 10);
             if (isNaN(maxGifts)) maxGifts = QueueManager.users.length;
 
+            const remainingBatch = DailyTracker.getRemainingBatch();
+            if (remainingBatch < maxGifts) {
+                maxGifts = remainingBatch;
+            }
+
             const targets = QueueManager.users.slice(0, maxGifts);
             if (targets.length === 0) {
                 Logger.log("No targets in queue. Refresh first.");
+                StateManager.releaseExecutionLock();
+                StateManager.setExecutionUI();
                 return;
             }
 
@@ -1700,7 +1773,8 @@
                     Logger.log(`Gifting ${safeTargets.length} ${noun}`);
                 }
             } else {
-                Logger.log(`Gifting Newest Mice (${safeTargets.length})`);
+                const noun = safeTargets.length === 1 ? 'Mouse' : 'Mice';
+                Logger.log(`Gifting Newest ${noun} (${safeTargets.length})`);
             }
 
             const minReserve = StateManager.state.config.minReserve;
@@ -1799,7 +1873,7 @@
 
                     // Success handling
                     Logger.log(`${logIcon('check', 13)} ${user.name} (${giftAmount})`);
-                    DailyTracker.increment();
+                    DailyTracker.increment(true);
 
                     if (data.seedbonus !== undefined) {
                         StateManager.updateBP(parseInt(data.seedbonus, 10));
@@ -1900,7 +1974,7 @@
             }
         },
 
-        applySupportLinks(mode) {
+        applySupportLinks(isEnabled) {
             if (!this.supportStyleEl) {
                 this.supportStyleEl = document.createElement('style');
                 document.head.appendChild(this.supportStyleEl);
@@ -1908,7 +1982,7 @@
 
             const donLink = document.querySelector('.mmDonBox > a');
 
-            if (mode === 'Off') {
+            if (!isEnabled) {
                 this.supportStyleEl.textContent = '';
                 if (donLink) {
                     donLink.style.backgroundColor = '#700';
@@ -1917,28 +1991,17 @@
                 return;
             }
 
-            let css = '';
-            if (mode === 'Blend') {
-                if (donLink) {
-                    // Stripping the inline style allows the native theme CSS to apply the standard dark menu background
-                    donLink.style.backgroundColor = '';
-                    donLink.style.fontWeight = '';
-                }
-                css = `
-                    .sbDonCrypto img { display: none !important; }
-                    .sbDonCrypto a::after { content: "Get A Seedbox"; }
-                    .sbDonCrypto a { padding: 0 10px !important; display: block !important; }
-                `;
-            } else if (mode === 'Hide') {
-                if (donLink) {
-                    donLink.style.backgroundColor = '#700';
-                    donLink.style.fontWeight = 'bold';
-                }
-                css = `
-                    .mmDonBox, .sbDonCrypto { display: none !important; }
-                `;
+            if (donLink) {
+                // Stripping the inline style allows the native theme CSS to apply the standard dark menu background
+                donLink.style.backgroundColor = '';
+                donLink.style.fontWeight = '';
             }
-            this.supportStyleEl.textContent = css;
+
+            this.supportStyleEl.textContent = `
+                .sbDonCrypto img { display: none !important; }
+                .sbDonCrypto a::after { content: "Get A Seedbox"; }
+                .sbDonCrypto a { padding: 0 10px !important; display: block !important; }
+            `;
         },
 
         applyAutoMinimize(configArr = []) {
@@ -1998,7 +2061,7 @@
             }
         },
 
-        applyHideNews(mode) {
+        applyHideNews(isEnabled) {
             if (window.location.pathname !== '/' && window.location.pathname !== '/index.php') return;
 
             const fpTime = document.querySelector('.fpTime');
@@ -2010,12 +2073,11 @@
             if (newsHeader) newsHeader.style.display = '';
             newsItems.forEach(item => item.style.display = '');
 
-            if (mode === 'Off') return;
+            if (!isEnabled) return;
 
             if (fpTime) fpTime.style.display = 'none';
 
-            if (mode === 'Click') {
-                const dismissedNewsKey = 'mam_dismissed_news';
+            const dismissedNewsKey = 'mam_dismissed_news';
                 let dismissedNews = [];
                 try { dismissedNews = JSON.parse(GM_getValue(dismissedNewsKey, '[]')); } catch (e) {}
 
@@ -2050,7 +2112,6 @@
                 });
 
                 if (visibleCount <= 0 && newsHeader) newsHeader.style.display = 'none';
-            }
         }
     };
 
@@ -2902,8 +2963,8 @@
                 giftBtn.onmouseout = () => giftBtn.style.transform = 'scale(1)';
                 giftBtn.onclick = async (e) => {
                     e.preventDefault();
-                    if (!DailyTracker.canGift()) {
-                        Logger.log(`${logIcon('stop', 13)} Daily gift limit reached.`);
+                    if (!DailyTracker.canGiftManual()) {
+                        Logger.log(`${logIcon('stop', 13)} Server daily limit reached.`);
                         return;
                     }
                     let defaultPoints = StateManager.state.config.giftAmount;
@@ -3080,7 +3141,7 @@
                     const targetName = giftUserInput ? giftUserInput.value : 'User';
                     const amount = bonusGiftInput ? (parseInt(bonusGiftInput.value, 10) || 100) : 100;
 
-                    if (!DailyTracker.canGift()) {
+                    if (!DailyTracker.canGiftManual()) {
                         Logger.log(`${logIcon('stop', 13)} Server daily limit reached.`);
                         return;
                     }
@@ -3215,7 +3276,11 @@
             const queueHtml = queueCount > 0 ? ` <span style="color:#00bcd4; font-weight:bold;">(${queueCount})</span>` : '';
 
             countEl.innerHTML = `${total}${queueHtml}`;
-            countEl.parentElement.title = `Lifetime Mice Gifted: ${total} | In Queue: ${queueCount}`;
+
+            const dData = DailyTracker.get();
+            const softCap = StateManager.state.config.softCap;
+            const batchInfo = softCap > 0 ? ` | Soft Limit: ${dData.batchCount}/${softCap}` : '';
+            countEl.parentElement.title = `Lifetime Mice Gifted: ${total} | In Queue: ${queueCount}${batchInfo} | Gifted Today: ${dData.totalCount}`;
         }
     };
     window.addEventListener('mam-db-updated', updateStatsCount);
@@ -3303,11 +3368,22 @@
 
     bindInput('mam-cfg-amount', 'giftAmount', 'string');
     bindInput('mam-cfg-reserve', 'minReserve', 'number', 1000, 99999);
+    const elSoftCap = bindInput('mam-cfg-soft-cap', 'softCap', 'number', 0, 999999);
+    if (elSoftCap) {
+        const syncCapChange = (e) => {
+            const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+            StateManager.updateConfig('softCap', val);
+            DailyTracker.updateUI();
+            updateStatsCount();
+        };
+        elSoftCap.addEventListener('input', syncCapChange);
+        elSoftCap.addEventListener('change', syncCapChange);
+    }
     bindSegment('mam-cfg-buy-amount', 'buyAmount');
     const elBuyWhen = bindInput('mam-cfg-buy-when', 'buyWhen', 'number', 1000, 99999);
-    bindSegment('mam-cfg-hide-news', 'hideNews');
+    bindInput('mam-cfg-hide-news', 'hideNews', 'checkbox');
     bindInput('mam-cfg-compact', 'compactLayout', 'checkbox');
-    bindSegment('mam-cfg-support-links', 'supportLinks');
+    bindInput('mam-cfg-support-links', 'supportLinks', 'checkbox');
     bindSegment('mam-cfg-position', 'uiPosition');
 
     const bindMultiSegment = (id, key) => {
