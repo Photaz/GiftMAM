@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.1.6
+// @version      3.1.8
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -27,10 +27,6 @@
 // @resource     iconApi https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/api.svg
 // @resource     iconUi https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/ui.svg
 // @resource     iconData https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/data.svg
-// @resource     iconPosTL https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/topleft.svg
-// @resource     iconPosTR https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/topright.svg
-// @resource     iconPosBL https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/botleft.svg
-// @resource     iconPosBR https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/botright.svg
 // @resource     iconAudit https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/audit.svg
 // @resource     iconReset https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/reset.svg
 // @resource     iconVault https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/vault.svg
@@ -38,12 +34,13 @@
 // @resource     iconStop https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/stop.svg
 // @resource     iconBuy https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/buy.svg
 // @resource     iconCrown https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/crown.svg
-// @resource     iconSlow https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/slow.svg
 // @resource     iconLoad https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/loading.svg
 // @resource     iconLock https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/lock.svg
 // @resource     iconRefresh https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/refresh.svg
 // @resource     iconError https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/error.svg
 // @resource     iconCheck https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/check.svg
+// @resource     iconBack https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/back.svg
+// @resource     iconSearch https://raw.githubusercontent.com/Photaz/GiftMAM/refs/heads/main/assets/search.svg
 // @connect      api.github.com
 // @connect      raw.githubusercontent.com
 // ==/UserScript==
@@ -225,6 +222,7 @@
         }
         .mam-refresh-btn:hover, .mam-exit-btn:hover { opacity: 1; }
         .mam-refresh-btn img { width: 14px; height: 14px; }
+        .mam-exit-btn img { width: 16px; height: 16px; display: block; pointer-events: none; }
 
         /* --- SETTINGS ROW STABILITY --- */
         .mam-settings-container, .mam-about-container {
@@ -355,9 +353,13 @@
             cursor: pointer; border-radius: 2px; display: flex; align-items: center; justify-content: center;
             opacity: 0.5; transition: 0.2s; box-sizing: border-box;
         }
-        .mam-pos-box img { width: 18px; height: 18px; pointer-events: none; filter: invert(0.8); }
+        .mam-pos-box img { width: 14px; height: 14px; pointer-events: none; filter: grayscale(1) brightness(1.5); transition: transform 0.15s ease; }
+        .mam-pos-box[data-val="top-left"] img { transform: rotate(45deg); }
+        .mam-pos-box[data-val="top-right"] img { transform: rotate(135deg); }
+        .mam-pos-box[data-val="bottom-right"] img { transform: rotate(225deg); }
+        .mam-pos-box[data-val="bottom-left"] img { transform: rotate(315deg); }
         .mam-pos-box.active { border-color: #5EB9FF; background: rgba(94, 185, 255, 0.2); opacity: 1; }
-        .mam-pos-box.active img { filter: invert(0.6) sepia(1) saturate(5) hue-rotate(180deg); }
+        .mam-pos-box.active img { filter: none; }
 
         /* --- TOOLBAR (BOTTOM) --- */
         .mam-toolbar {
@@ -448,10 +450,6 @@
         api:      GM_getResourceURL('iconApi'),
         ui:       GM_getResourceURL('iconUi'),
         data:     GM_getResourceURL('iconData'),
-        posTL:    GM_getResourceURL('iconPosTL'),
-        posTR:    GM_getResourceURL('iconPosTR'),
-        posBL:    GM_getResourceURL('iconPosBL'),
-        posBR:    GM_getResourceURL('iconPosBR'),
         audit:    GM_getResourceURL('iconAudit'),
         reset:    GM_getResourceURL('iconReset'),
         vault:    GM_getResourceURL('iconVault'),
@@ -459,13 +457,13 @@
         stop:     GM_getResourceURL('iconStop'),
         buy:      GM_getResourceURL('iconBuy'),
         crown:    GM_getResourceURL('iconCrown'),
-        slow:     GM_getResourceURL('iconSlow'),
         load:     GM_getResourceURL('iconLoad'),
         lock:     GM_getResourceURL('iconLock'),
         refresh:  GM_getResourceURL('iconRefresh'),
         error:    GM_getResourceURL('iconError'),
         check:    GM_getResourceURL('iconCheck'),
-        search:   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235EB9FF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E"
+        back:    GM_getResourceURL('iconBack'),
+        search:  GM_getResourceURL('iconSearch'),
     };
 
     const logIcon = (name, size = 11) => `<img src="${icons[name]}" style="width: ${size}px; height: ${size}px; vertical-align: text-bottom; margin-right: 4px; filter: drop-shadow(1px 1px 0px rgba(0,0,0,0.5));">`;
@@ -508,7 +506,7 @@
                     <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.gift}" style="width: 14px; height: 14px; vertical-align: middle;"></span> Gifting</div>
                     <div class="mam-section-header-right">
                         <div id="mam-ui-daily-gifts" style="color: var(--mam-text); font-weight: normal; font-size: 10px; text-transform: none;">Today: 0 / 0</div>
-                        <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+                        <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><img src="${icons.back}"></button>
                 </div>
                 </div>
                 <div class="mam-setting-row">
@@ -539,7 +537,7 @@
                     <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.api}" style="width: 16px; height: 16px; vertical-align: middle;"></span> Store & API</div>
                     <div class="mam-section-header-right">
                         <button class="mam-audit-btn" id="btn-open-audit" title="View Audit Log"><img src="${icons.audit}" style="width: 14px; height: 14px;"></button>
-                        <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+                        <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><img src="${icons.back}"></button>
                     </div>
                 </div>
                 <div class="mam-setting-row">
@@ -570,15 +568,15 @@
             <div class="mam-settings-container">
                 <div class="mam-section-header">
                     <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.ui}" style="width: 14px; height: 14px; vertical-align: middle;"></span> Panel UI</div>
-                    <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+                    <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><img src="${icons.back}"></button>
                 </div>
                 <div class="mam-setting-row">
                     <span class="mam-label-text">Position:</span>
                     <div class="mam-pos-grid" id="mam-cfg-position">
-                        <div class="mam-pos-box" data-val="top-left"><img src="${icons.posTL}"></div>
-                        <div class="mam-pos-box" data-val="top-right"><img src="${icons.posTR}"></div>
-                        <div class="mam-pos-box" data-val="bottom-left"><img src="${icons.posBL}"></div>
-                        <div class="mam-pos-box active" data-val="bottom-right"><img src="${icons.posBR}"></div>
+                        <div class="mam-pos-box" data-val="top-left"><img src="${icons.back}"></div>
+                        <div class="mam-pos-box" data-val="top-right"><img src="${icons.back}"></div>
+                        <div class="mam-pos-box" data-val="bottom-left"><img src="${icons.back}"></div>
+                        <div class="mam-pos-box active" data-val="bottom-right"><img src="${icons.back}"></div>
                     </div>
                 </div>
                 <div class="mam-setting-row">
@@ -603,7 +601,7 @@
             <div class="mam-settings-container">
                 <div class="mam-section-header">
                     <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.ui}" style="width: 14px; height: 14px; vertical-align: middle;"></span> Site UI</div>
-                    <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+                    <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><img src="${icons.back}"></button>
                 </div>
                 <div class="mam-setting-row">
                     <label for="mam-cfg-hide-news">Click to Hide News:</label>
@@ -627,7 +625,7 @@
             <div class="mam-settings-container">
                 <div class="mam-section-header">
                     <div class="mam-section-header-left"><span class="mam-emoji"><img src="${icons.data}" style="width: 16px; height: 16px; vertical-align: middle;"></span> Data</div>
-                    <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+                    <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><img src="${icons.back}"></button>
                 </div>
                 <div style="display: flex; gap: 6px; justify-content: space-between; margin-top: 4px;">
                     <button class="mam-btn" id="btn-export" style="flex: 1;">Export</button>
@@ -639,7 +637,7 @@
 
         <div class="mam-view" id="mam-view-audit">
             <button class="mam-exit-btn" id="btn-close-audit" title="Back to Settings" style="position: absolute; top: 6px; right: 8px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                <img src="${icons.back}">
             </button>
             <div class="mam-audit-log-container" id="mam-audit-log">
                 <!-- Mock log population -->
@@ -687,7 +685,7 @@
 
         <div class="mam-view" id="mam-view-changelog">
             <button class="mam-exit-btn" id="btn-close-changelog" title="Back to About" style="position: absolute; top: 6px; right: 8px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5EB9FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                <img src="${icons.back}">
             </button>
             <div class="mam-audit-log-container" id="mam-changelog-content" style="user-select: text;">
                 <div style="color: var(--mam-text-muted); text-align: center; margin-top: 20px;">Loading release notes...</div>
@@ -1825,7 +1823,7 @@
                     if (!data.success) {
                         const errStr = (data.error || "").toLowerCase();
                         if (errStr.includes("rate limit")) {
-                            Logger.log(`${logIcon('slow')} Pausing 15 seconds...`);
+                            Logger.log(`${logIcon('load')} Pausing 15 seconds...`);
                             const target = Date.now() + 15000;
                             while (Date.now() < target) {
                                 if (!StateManager.state.isRunning) {
@@ -2112,6 +2110,95 @@
                 });
 
                 if (visibleCount <= 0 && newsHeader) newsHeader.style.display = 'none';
+        }
+    };
+
+    const LottoResultsManager = {
+        init() {
+            if (!window.location.pathname.startsWith('/lotto/winners.php')) return;
+
+            const mainBody = document.getElementById('mainBody');
+            if (!mainBody) return;
+
+            const header = mainBody.querySelector('h1');
+            if (!header) return;
+
+            // 1. Scrape current username and UID from the top nav bar
+            const userMenu = document.getElementById('userMenu');
+            const myInfoLink = document.querySelector('a.myInfo[href^="/u/"]');
+
+            let myUsername = null;
+            let myUid = null;
+
+            if (userMenu) {
+                // Extracts "Photaz" from the child text nodes before the status icons
+                myUsername = userMenu.childNodes[0]?.textContent?.trim();
+            }
+
+            if (myInfoLink) {
+                const match = myInfoLink.getAttribute('href').match(/\/u\/(\d+)/);
+                if (match) myUid = match[1];
+            }
+
+            if (!myUsername && !myUid) return;
+
+            // 2. Scan winners by tier
+            let wonTier = null;
+            let wonReward = null;
+            let currentTier = null;
+            let currentReward = null;
+
+            for (const child of mainBody.children) {
+                if (child.tagName === 'H3') {
+                    currentTier = child.textContent.trim(); // "FIRST PLACE", "SECOND PLACE", "THIRD PLACE"
+                } else if (child.tagName === 'SPAN' && child.style.color === 'green') {
+                    currentReward = child.textContent.trim(); // "100GB", "50GB", "30GB"
+                } else if (child.tagName === 'A' && child.getAttribute('href')?.startsWith('/u/')) {
+                    const hrefUid = child.getAttribute('href').split('/u/')[1];
+                    const winnerName = child.textContent.trim();
+
+                    const isMatch = (myUid && hrefUid === myUid) ||
+                                    (myUsername && winnerName.toLowerCase() === myUsername.toLowerCase());
+
+                    if (isMatch) {
+                        wonTier = currentTier;
+                        wonReward = currentReward;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Format Place Name (e.g. "FIRST PLACE" -> "1st place")
+            const formatPlace = (tierStr) => {
+                if (!tierStr) return 'a winning place';
+                const lower = tierStr.toLowerCase();
+                if (lower.includes('first')) return '1st place';
+                if (lower.includes('second')) return '2nd place';
+                if (lower.includes('third')) return '3rd place';
+                return tierStr;
+            };
+
+            // 4. Construct Notification Banner
+            const banner = document.createElement('div');
+            banner.id = 'mam-lotto-status-banner';
+            banner.style.cssText = 'margin: 14px 0 22px 0; font-size: x-large; line-height: 1.4; color: #aaa;';
+
+            const displayName = myUsername || 'Mouse';
+
+            if (wonTier) {
+                banner.innerHTML = `Congratulations, <span style="color: #00B853;">${displayName}</span>! You came in <span style="color: #00B853;">${formatPlace(wonTier)}</span> (${wonReward || 'Jackpot'}).`;
+            } else {
+                banner.innerHTML = `Sorry, <span style="color: #D32F2F;">${displayName}</span>. You did not win.`;
+            }
+
+            // 5. Insert directly after the <h1> header and strip MAM's redundant leading <br>
+            header.insertAdjacentElement('afterend', banner);
+
+            const statsSpan = banner.nextElementSibling;
+            if (statsSpan && statsSpan.tagName === 'SPAN') {
+                const leadingBr = statsSpan.querySelector('br');
+                if (leadingBr) leadingBr.remove();
+            }
         }
     };
 
@@ -3250,6 +3337,7 @@
     // Initialize Subsystems (State MUST load before Tweaks)
     Thread.init();
     StateManager.init();
+    LottoResultsManager.init();
     PageTweaks.init();
     DailiesManager.init();
     NotificationManager.init();
