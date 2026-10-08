@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.1.8
+// @version      3.1.9
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -540,7 +540,8 @@
                         <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><img src="${icons.back}"></button>
                     </div>
                 </div>
-                <div class="mam-setting-row">
+                <div style="font-size: 10px; color: #FFB74D; text-align: center; margin: 3px 0 1px 0;">Buy/VIP temporarily disabled.</div>
+                <div class="mam-setting-row" style="opacity: 0.5; pointer-events: none;">
                     <span class="mam-label-text">Buy Amount:</span>
                     <div class="mam-segment-grid" id="mam-cfg-buy-amount">
                         <div class="mam-segment" data-val="Off">Off</div>
@@ -549,16 +550,16 @@
                         <div class="mam-segment" data-val="Max">Max</div>
                     </div>
                 </div>
-                <div class="mam-setting-row" id="row-buy-when">
+                <div class="mam-setting-row" id="row-buy-when" style="opacity: 0.5; pointer-events: none;">
                     <label for="mam-cfg-buy-when">Buy When ≥:</label>
                     <input type="number" id="mam-cfg-buy-when" min="1000" max="999999">
                 </div>
                 <div class="mam-setting-row">
                     <span class="mam-label-text">VIP & Alerts:</span>
                     <div class="mam-segment-grid" id="mam-cfg-store-automations" style="width: 120px;">
-                        <div class="mam-segment" data-val="VIP">VIP</div>
-                        <div class="mam-segment" data-val="Vault">Vault</div>
-                        <div class="mam-segment" data-val="Lotto">Lotto</div>
+                        <div class="mam-segment" data-val="VIP" style="opacity: 0.35; pointer-events: none; cursor: not-allowed;" title="Auto-VIP renewal temporarily disabled">VIP</div>
+                        <div class="mam-segment" data-val="Vault" title="Vault reminder icon">Vault</div>
+                        <div class="mam-segment" data-val="Lotto" title="Lotto reminder icon">Lotto</div>
                     </div>
                 </div>
             </div>
@@ -1510,7 +1511,7 @@
                 }
             }
 
-            if (StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
+            if (Engine.STORE_AUTOMATIONS_ENABLED && StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
                 Engine.triggerHeartbeat();
             }
         }
@@ -1520,6 +1521,7 @@
         lastApiCall: 0,
         lastHeartbeat: 0,
         heartbeatTimer: null,
+        STORE_AUTOMATIONS_ENABLED: false, // Temporary gate: disabled pending session resolution
 
         // Universal Rate Limiter: Ensures minGapMs passes between any API calls
         async enforceRateLimit(minGapMs = 15000, context = 'background') {
@@ -1569,6 +1571,7 @@
         },
 
         async heartbeatLoop() {
+            if (!this.STORE_AUTOMATIONS_ENABLED) return;
             this.heartbeatActive = true;
             while (this.heartbeatActive) {
                 const elapsed = Date.now() - this.lastHeartbeat;
@@ -1595,6 +1598,7 @@
         },
 
         initHeartbeat() {
+            if (!this.STORE_AUTOMATIONS_ENABLED) return;
             this.lastHeartbeat = parseInt(GM_getValue('mam_last_heartbeat', '0'), 10);
             const now = Date.now();
             if (this.lastHeartbeat === 0 || this.lastHeartbeat > now) {
@@ -1605,6 +1609,7 @@
         },
 
         async processStoreQueue(vipUntilStr = null, context = 'background') {
+            if (!this.STORE_AUTOMATIONS_ENABLED) return true;
             const currentBP = StateManager.state.currentBP || 0;
             const buyAmount = StateManager.state.config.buyAmount;
             const buyWhen = StateManager.state.config.buyWhen;
@@ -1635,7 +1640,12 @@
 
                     if (await attemptPurchaseLock()) {
                         Logger.log("Renewing VIP...");
-                        const res = await fetch('/json/bonusBuy.php?spendtype=VIP&duration=max');
+                        const res = await fetch('/json/bonusBuy.php?spendtype=VIP&duration=max', {
+                            headers: {
+                                'Accept': 'application/json, text/javascript, */*; q=0.01',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        });
                         this.lastApiCall = Date.now();
 
                         if (res.ok) {
@@ -1663,9 +1673,14 @@
                 if (context === 'batch' && !StateManager.state.isRunning) return false;
 
                 if (await attemptPurchaseLock()) {
-                    Logger.log(`Buying ${logLabel} upload...`);
-                    const res = await fetch(`/json/bonusBuy.php?spendtype=upload&amount=${encodeURIComponent(parsedAmount)}`);
-                    this.lastApiCall = Date.now();
+                        Logger.log(`Buying ${logLabel} upload...`);
+                        const res = await fetch(`/json/bonusBuy.php?spendtype=upload&amount=${encodeURIComponent(parsedAmount)}`, {
+                            headers: {
+                                'Accept': 'application/json, text/javascript, */*; q=0.01',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        });
+                        this.lastApiCall = Date.now();
 
                     if (res.ok) {
                         const uData = await res.json();
@@ -1683,11 +1698,18 @@
         },
 
         async triggerHeartbeat() {
+            if (!this.STORE_AUTOMATIONS_ENABLED) return;
             try {
                 const passed = await this.enforceRateLimit(15000, 'background');
                 if (!passed) return;
 
-                const response = await fetch(`https://www.myanonamouse.net/jsonLoad.php?_t=${Date.now()}`, { cache: 'no-store' });
+                const response = await fetch(`/jsonLoad.php?_t=${Date.now()}`, {
+                    cache: 'no-store',
+                    headers: {
+                        'Accept': 'application/json, text/javascript, */*; q=0.01',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
                 this.lastApiCall = Date.now();
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
@@ -1895,7 +1917,7 @@
                     const buyWhen = StateManager.state.config.buyWhen;
                     const lastBuy = parseInt(GM_getValue('mam_last_buy_time', '0'), 10);
 
-                    if (buyAmount !== 'Off' && StateManager.state.currentBP >= buyWhen && (Date.now() - lastBuy >= 30000)) {
+                    if (this.STORE_AUTOMATIONS_ENABLED && buyAmount !== 'Off' && StateManager.state.currentBP >= buyWhen && (Date.now() - lastBuy >= 30000)) {
                         const storeProcessed = await this.processStoreQueue(null, 'batch');
                         if (!storeProcessed || !StateManager.state.isRunning) {
                             abortReason = "stopped";
@@ -1928,7 +1950,7 @@
 
             this.resetUI(shouldClear, finalColor);
 
-            if (StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
+            if (this.STORE_AUTOMATIONS_ENABLED && StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
                 this.triggerHeartbeat();
             }
         }
@@ -2214,7 +2236,7 @@
             window.addEventListener('mam-config-updated', (e) => {
                 if (e.detail.key === 'storeAutomations') {
                     this.updateUI();
-                    if (e.detail.value.includes('VIP')) {
+                    if (Engine.STORE_AUTOMATIONS_ENABLED && e.detail.value.includes('VIP')) {
                         Engine.triggerHeartbeat();
                     }
                 }
@@ -3351,7 +3373,10 @@
     DailyTracker.updateUI();
 
     // Check store queue on F5/Page Load if condition is met
-    if (StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP !== null && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
+    const buyDue = StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen;
+    const vipDue = StateManager.state.config.storeAutomations.includes('VIP');
+
+    if (Engine.STORE_AUTOMATIONS_ENABLED && StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP !== null && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
         Engine.triggerHeartbeat();
     }
 
@@ -3508,10 +3533,10 @@
     bindMultiSegment('mam-cfg-social-gifting', 'socialGifting');
     bindMultiSegment('mam-cfg-store-automations', 'storeAutomations');
 
-    // UI Logic: Disable 'Buy When' if 'Buy Amount' is 'Off'
+    // UI Logic: Disable 'Buy When' if 'Buy Amount' is 'Off' or automations are paused
     const toggleBuyWhen = () => {
         const row = document.getElementById('row-buy-when');
-        if (StateManager.state.config.buyAmount === 'Off') {
+        if (!Engine.STORE_AUTOMATIONS_ENABLED || StateManager.state.config.buyAmount === 'Off') {
             row.style.opacity = '0.4';
             elBuyWhen.disabled = true;
         } else {
