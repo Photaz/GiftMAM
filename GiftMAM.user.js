@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GiftMAM
 // @namespace    https://github.com/Photaz/GiftMAM
-// @version      3.1.9
+// @version      3.1.9.2
 // @description  Gift Many A Mouse Reforged
 // @author       Photaz
 // @match        https://www.myanonamouse.net/*
@@ -56,47 +56,6 @@
         }
         return originalFetch(resource, options);
     };
-
-    // Inject interceptors directly into the native page context to bypass Tampermonkey sandbox isolation
-    const interceptScript = document.createElement('script');
-    interceptScript.textContent = `
-        (function() {
-            // 1. Intercept jQuery AJAX (Legacy MAM native behavior)
-            if (typeof $ !== 'undefined') {
-                $(document).ajaxComplete(function(event, xhr, settings) {
-                    if (settings.url && settings.url.includes('/json/bonusBuy.php') && settings.url.includes('spendtype=gift') && settings.url.includes('giftTo=')) {
-                        try {
-                            const data = JSON.parse(xhr.responseText);
-                            if (data && data.success && data.to) {
-                                window.dispatchEvent(new CustomEvent('mam-native-gift-sent', { detail: { uid: data.to, name: data.toName || 'User', data: data } }));
-                            }
-                        } catch(e) {}
-                    }
-                });
-            }
-
-            // 2. Intercept native fetch (Future-proofing for site updates)
-            const origFetch = window.fetch;
-            window.fetch = async function(resource, options) {
-                const response = await origFetch.apply(this, arguments);
-                let urlStr = typeof resource === 'string' ? resource : (resource instanceof Request ? resource.url : '');
-
-                if (urlStr.includes('/json/bonusBuy.php') && urlStr.includes('spendtype=gift') && urlStr.includes('giftTo=')) {
-                    try {
-                        const clonedRes = response.clone();
-                        clonedRes.json().then(data => {
-                            if (data && data.success && data.to) {
-                                window.dispatchEvent(new CustomEvent('mam-native-gift-sent', { detail: { uid: data.to, name: data.toName || 'User', data: data } }));
-                            }
-                        }).catch(() => {});
-                    } catch(e) {}
-                }
-                return response;
-            };
-        })();
-    `;
-    document.body.appendChild(interceptScript);
-    interceptScript.remove();
 
     // Prevent Tampermonkey from double-executing the script inside hidden iframes
     if (window.top !== window.self) return;
@@ -476,6 +435,7 @@
                 <span class="mam-title-icon mam-emoji mam-hover-scale" id="btn-about-title" title="About"><img src="${icons.main}" style="width: 20px; height: 20px; vertical-align: bottom;"></span>GiftMAM
                 <a href="/millionaires/donate.php" target="_blank" id="btn-vault-alert" class="mam-emoji mam-hover-scale" title="Vault Reminder (Click to donate)" style="display: none; margin-left: 8px;"><img src="${icons.vault}" style="width: 16px; height: 16px; vertical-align: middle;"></a>
                 <a href="/play_lotto.php" target="_blank" id="btn-lotto-alert" class="mam-emoji mam-hover-scale" title="Lotto Reminder (Click to enter)" style="display: none; margin-left: 4px;"><img src="${icons.lotto}" style="width: 16px; height: 16px; vertical-align: middle;"></a>
+                <a href="#" target="_blank" id="btn-vip-alert" class="mam-emoji mam-hover-scale" title="Renew VIP (Click to open profile & renew)" style="display: none; margin-left: 4px;"><img src="${icons.crown}" style="width: 16px; height: 16px; vertical-align: middle;"></a>
             </h3>
             <div class="mam-header-controls" style="display: flex; align-items: center;">
                 <button id="btn-settings" class="mam-emoji" title="Settings"><img src="${icons.settings}" style="width: 18px; height: 18px; vertical-align: middle;"></button>
@@ -540,8 +500,7 @@
                         <button class="mam-exit-btn btn-back-settings" title="Back to Settings"><img src="${icons.back}"></button>
                     </div>
                 </div>
-                <div style="font-size: 10px; color: #FFB74D; text-align: center; margin: 3px 0 1px 0;">Buy/VIP temporarily disabled.</div>
-                <div class="mam-setting-row" style="opacity: 0.5; pointer-events: none;">
+                <div class="mam-setting-row">
                     <span class="mam-label-text">Buy Amount:</span>
                     <div class="mam-segment-grid" id="mam-cfg-buy-amount">
                         <div class="mam-segment" data-val="Off">Off</div>
@@ -550,16 +509,16 @@
                         <div class="mam-segment" data-val="Max">Max</div>
                     </div>
                 </div>
-                <div class="mam-setting-row" id="row-buy-when" style="opacity: 0.5; pointer-events: none;">
+                <div class="mam-setting-row" id="row-buy-when">
                     <label for="mam-cfg-buy-when">Buy When ≥:</label>
                     <input type="number" id="mam-cfg-buy-when" min="1000" max="999999">
                 </div>
                 <div class="mam-setting-row">
-                    <span class="mam-label-text">VIP & Alerts:</span>
+                    <span class="mam-label-text">Alerts:</span>
                     <div class="mam-segment-grid" id="mam-cfg-store-automations" style="width: 120px;">
-                        <div class="mam-segment" data-val="VIP" style="opacity: 0.35; pointer-events: none; cursor: not-allowed;" title="Auto-VIP renewal temporarily disabled">VIP</div>
                         <div class="mam-segment" data-val="Vault" title="Vault reminder icon">Vault</div>
                         <div class="mam-segment" data-val="Lotto" title="Lotto reminder icon">Lotto</div>
+                        <div class="mam-segment" data-val="VIP" title="VIP expiration reminder icon">VIP</div>
                     </div>
                 </div>
             </div>
@@ -811,6 +770,8 @@
 
     // Centralized Memory and Sync Layout
     const StateManager = {
+        myUid: null,
+        myUsername: null,
         state: {
             isRunning: false,
             progress: 0,
@@ -825,7 +786,7 @@
                 limit: 'ALL',
                 buyAmount: 'Off',
                 buyWhen: 65000,
-                storeAutomations: ['Vault', 'Lotto'],
+                storeAutomations: ['Vault', 'Lotto', 'VIP'],
                 uiPosition: 'bottom-right',
                 autoMinimize: [],
                 autoHide: [],
@@ -878,6 +839,10 @@
                 siteBP.textContent = 'Bonus: ' + bp;
                 siteBP.setAttribute('data-exact-b-p', bp.toString());
             }
+
+            if (bp !== null && !this.state.isRunning && typeof Engine !== 'undefined') {
+                Engine.checkUploadPurchase('organic');
+            }
         },
 
        init() {
@@ -889,7 +854,7 @@
                 socialGifting: '["Shoutbox", "Forum"]',
                 buyAmount: 'Off',
                 buyWhen: 65000,
-                storeAutomations: '["Vault", "Lotto"]',
+                storeAutomations: ['Vault', 'Lotto', 'VIP'],
                 uiPosition: 'bottom-right',
                 autoMinimize: '[]',
                 autoHide: '[]',
@@ -904,7 +869,7 @@
             try { this.state.config.socialGifting = JSON.parse(stored.socialGifting); } catch(e) { this.state.config.socialGifting = ['Shoutbox', 'Forum']; }
             this.state.config.buyAmount = stored.buyAmount;
             this.state.config.buyWhen = parseInt(stored.buyWhen, 10);
-            try { this.state.config.storeAutomations = JSON.parse(stored.storeAutomations); } catch(e) { this.state.config.storeAutomations = ['Vault', 'Lotto']; }
+            try { this.state.config.storeAutomations = JSON.parse(stored.storeAutomations); } catch(e) { this.state.config.storeAutomations = ['Vault', 'Lotto', 'VIP']; }
             this.state.config.uiPosition = stored.uiPosition;
             try {
                 this.state.config.autoMinimize = typeof stored.autoMinimize === 'string' ? JSON.parse(stored.autoMinimize) : stored.autoMinimize;
@@ -919,6 +884,29 @@
             this.state.config.hideNews = stored.hideNews === true || stored.hideNews === 'Click' || stored.hideNews === 'Hide';
             this.state.config.compactLayout = stored.compactLayout;
             this.state.config.supportLinks = stored.supportLinks === true || stored.supportLinks === 'Blend';
+
+            // Scrape self profile identity from top navigation
+            const myInfoLink = document.querySelector('li.myInfo a[href*="/u/"]');
+            if (myInfoLink) {
+                const uidMatch = myInfoLink.getAttribute('href').match(/\/u\/(\d+)/);
+                if (uidMatch) {
+                    this.myUid = uidMatch[1];
+                    GM_setValue('mam_my_uid', this.myUid);
+                }
+            } else {
+                this.myUid = GM_getValue('mam_my_uid', null);
+            }
+
+            const userMenu = document.getElementById('userMenu');
+            if (userMenu) {
+                const name = userMenu.childNodes[0]?.textContent?.trim();
+                if (name) {
+                    this.myUsername = name;
+                    GM_setValue('mam_my_username', this.myUsername);
+                }
+            } else {
+                this.myUsername = GM_getValue('mam_my_username', null);
+            }
 
             // Scrape and initialize BP from native data attribute
             const domBP = document.getElementById('tmBP');
@@ -1010,6 +998,12 @@
                 case 'NOTIF_CLEARED':
                     if (typeof NotificationManager !== 'undefined') {
                         NotificationManager.hideLocal(msg.payload.type);
+                    }
+                    break;
+                case 'LOGGER_SYNC':
+                    if (msg.payload) {
+                        const iconPrefix = msg.payload.icon ? `${logIcon(msg.payload.icon, 13)} ` : '';
+                        Logger.log(`${iconPrefix}${msg.payload.msg}`);
                     }
                     break;
             }
@@ -1511,8 +1505,8 @@
                 }
             }
 
-            if (Engine.STORE_AUTOMATIONS_ENABLED && StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
-                Engine.triggerHeartbeat();
+            if (StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP !== null && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
+                Engine.checkUploadPurchase('organic');
             }
         }
     };
@@ -1521,7 +1515,7 @@
         lastApiCall: 0,
         lastHeartbeat: 0,
         heartbeatTimer: null,
-        STORE_AUTOMATIONS_ENABLED: false, // Temporary gate: disabled pending session resolution
+        STORE_AUTOMATIONS_ENABLED: false,
 
         // Universal Rate Limiter: Ensures minGapMs passes between any API calls
         async enforceRateLimit(minGapMs = 15000, context = 'background') {
@@ -1542,6 +1536,61 @@
         async apiFetch(url, options = {}) {
             await this.enforceRateLimit(15000);
             return fetch(url, options);
+        },
+
+        async checkUploadPurchase(context = 'organic') {
+            const buyAmount = StateManager.state.config.buyAmount;
+            const buyWhen = StateManager.state.config.buyWhen;
+            const currentBP = StateManager.state.currentBP || 0;
+
+            if (buyAmount === 'Off' || currentBP < buyWhen) return;
+
+            const attemptPurchaseLock = async () => {
+                const lockId = Math.random().toString();
+                GM_setValue('mam_purchase_mutex', lockId);
+                await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+                if (GM_getValue('mam_purchase_mutex') !== lockId) return false;
+                const lastBuy = parseInt(GM_getValue('mam_last_buy_time', '0'), 10);
+                if (Date.now() - lastBuy < 30000) return false;
+                GM_setValue('mam_last_buy_time', Date.now().toString());
+                return true;
+            };
+
+            const parsedAmount = buyAmount === 'Max' ? 'Max Affordable ' : parseInt(buyAmount, 10);
+            const logLabel = buyAmount === 'Max' ? 'Max' : `${parsedAmount}GB`;
+
+            const gap = context === 'batch' ? 15000 : 2000;
+            const passed = await this.enforceRateLimit(gap, context);
+            if (!passed) return;
+            if (context === 'batch' && !StateManager.state.isRunning) return;
+
+            if (await attemptPurchaseLock()) {
+                Logger.log(`Buying ${logLabel} upload...`);
+                try {
+                    const res = await fetch(`/json/bonusBuy.php?spendtype=upload&amount=${encodeURIComponent(parsedAmount)}`, {
+                        headers: {
+                            'Accept': 'application/json, text/javascript, */*; q=0.01',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    this.lastApiCall = Date.now();
+
+                    if (res.ok) {
+                        const uData = await res.json();
+                        if (uData.success) {
+                            Logger.log(`${logIcon('buy')} (${logLabel}) bought.`);
+                            AuditLogger.add(`${logLabel} bought.`);
+                            if (uData.seedbonus !== undefined) {
+                                StateManager.updateBP(parseInt(uData.seedbonus, 10));
+                            }
+                        } else {
+                            Logger.log(`Upload buy failed: ${uData.error}`);
+                        }
+                    }
+                } catch (err) {
+                    Logger.log(`Upload purchase network error: ${err.message}`);
+                }
+            }
         },
 
         resetUI(clearProgress = true, color = '#3498DB') {
@@ -1574,154 +1623,16 @@
             if (!this.STORE_AUTOMATIONS_ENABLED) return;
             this.heartbeatActive = true;
             while (this.heartbeatActive) {
-                const elapsed = Date.now() - this.lastHeartbeat;
-                const buyEnabled = StateManager.state.config.buyAmount !== 'Off';
-                const vipEnabled = StateManager.state.config.storeAutomations.includes('VIP');
-
-                const targetInterval = buyEnabled ? (15 * 60 * 1000) : (24 * 60 * 60 * 1000);
-
-                if (!StateManager.state.isRunning) {
-                    if (buyEnabled || vipEnabled) WakeLock.acquire();
-                    else WakeLock.release();
-                }
-
-                if (elapsed >= targetInterval) {
-                    if ((buyEnabled || vipEnabled) && !StateManager.state.isRunning) {
-                        await this.triggerHeartbeat();
-                    }
-                    this.lastHeartbeat = Date.now();
-                    GM_setValue('mam_last_heartbeat', this.lastHeartbeat.toString());
-                }
-                // Continually check delta every 5 seconds via unthrottled worker
                 await Thread.sleep(5000);
             }
         },
 
         initHeartbeat() {
             if (!this.STORE_AUTOMATIONS_ENABLED) return;
-            this.lastHeartbeat = parseInt(GM_getValue('mam_last_heartbeat', '0'), 10);
-            const now = Date.now();
-            if (this.lastHeartbeat === 0 || this.lastHeartbeat > now) {
-                this.lastHeartbeat = now;
-                GM_setValue('mam_last_heartbeat', this.lastHeartbeat.toString());
-            }
-            if (!this.heartbeatActive) this.heartbeatLoop();
-        },
-
-        async processStoreQueue(vipUntilStr = null, context = 'background') {
-            if (!this.STORE_AUTOMATIONS_ENABLED) return true;
-            const currentBP = StateManager.state.currentBP || 0;
-            const buyAmount = StateManager.state.config.buyAmount;
-            const buyWhen = StateManager.state.config.buyWhen;
-
-            const attemptPurchaseLock = async () => {
-                const lockId = Math.random().toString();
-                GM_setValue('mam_purchase_mutex', lockId);
-                await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
-                if (GM_getValue('mam_purchase_mutex') !== lockId) return false;
-                const lastBuy = parseInt(GM_getValue('mam_last_buy_time', '0'), 10);
-                if (Date.now() - lastBuy < 30000) return false;
-                GM_setValue('mam_last_buy_time', Date.now().toString());
-                return true;
-            };
-
-            // 1. VIP Renewal Evaluation
-            if (StateManager.state.config.storeAutomations.includes('VIP') && vipUntilStr) {
-                const vipExpiration = new Date(vipUntilStr.replace(/-/g, '/')).getTime();
-                const remainingTimeMs = vipExpiration - Date.now();
-                const maxVipMs = 90 * 24 * 60 * 60 * 1000;
-                const minAllowedPurchaseMs = 7 * 24 * 60 * 60 * 1000;
-
-                if (remainingTimeMs <= (maxVipMs - minAllowedPurchaseMs) && currentBP >= (StateManager.state.config.minReserve + 1250)) {
-                    const gap = context === 'batch' ? 15000 : 2000;
-                    const passed = await this.enforceRateLimit(gap, context);
-                    if (!passed) return false;
-                    if (context === 'batch' && !StateManager.state.isRunning) return false;
-
-                    if (await attemptPurchaseLock()) {
-                        Logger.log("Renewing VIP...");
-                        const res = await fetch('/json/bonusBuy.php?spendtype=VIP&duration=max', {
-                            headers: {
-                                'Accept': 'application/json, text/javascript, */*; q=0.01',
-                                'X-Requested-With': 'XMLHttpRequest'
-                            }
-                        });
-                        this.lastApiCall = Date.now();
-
-                        if (res.ok) {
-                            const vipData = await res.json();
-                            if (vipData.success) {
-                                Logger.log(`${logIcon('crown')} VIP renewed...`);
-                                AuditLogger.add("Renewed VIP status.");
-                                if (vipData.seedbonus !== undefined) StateManager.updateBP(parseInt(vipData.seedbonus, 10));
-                            } else {
-                                Logger.log(`VIP Renewal Rejected: ${vipData.error || 'Unknown error'}`);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 2. Upload Buy Evaluation
-            if (buyAmount !== 'Off' && currentBP >= buyWhen) {
-                const parsedAmount = buyAmount === 'Max' ? 'Max Affordable ' : parseInt(buyAmount, 10);
-                const logLabel = buyAmount === 'Max' ? 'Max' : `${parsedAmount}GB`;
-
-                const gap = context === 'batch' ? 15000 : 2000;
-                const passed = await this.enforceRateLimit(gap, context);
-                if (!passed) return false;
-                if (context === 'batch' && !StateManager.state.isRunning) return false;
-
-                if (await attemptPurchaseLock()) {
-                        Logger.log(`Buying ${logLabel} upload...`);
-                        const res = await fetch(`/json/bonusBuy.php?spendtype=upload&amount=${encodeURIComponent(parsedAmount)}`, {
-                            headers: {
-                                'Accept': 'application/json, text/javascript, */*; q=0.01',
-                                'X-Requested-With': 'XMLHttpRequest'
-                            }
-                        });
-                        this.lastApiCall = Date.now();
-
-                    if (res.ok) {
-                        const uData = await res.json();
-                        if (uData.success) {
-                            Logger.log(`${logIcon('buy')} (${logLabel}) bought.`);
-                            AuditLogger.add(`${logLabel} bought.`);
-                            if (uData.seedbonus !== undefined) StateManager.updateBP(parseInt(uData.seedbonus, 10));
-                        } else {
-                            Logger.log(`Upload buy failed: ${uData.error}`);
-                        }
-                    }
-                }
-            }
-            return true;
         },
 
         async triggerHeartbeat() {
             if (!this.STORE_AUTOMATIONS_ENABLED) return;
-            try {
-                const passed = await this.enforceRateLimit(15000, 'background');
-                if (!passed) return;
-
-                const response = await fetch(`/jsonLoad.php?_t=${Date.now()}`, {
-                    cache: 'no-store',
-                    headers: {
-                        'Accept': 'application/json, text/javascript, */*; q=0.01',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                });
-                this.lastApiCall = Date.now();
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const data = await response.json();
-
-                if (data.seedbonus !== undefined) {
-                    StateManager.updateBP(parseInt(data.seedbonus, 10));
-                }
-
-                await this.processStoreQueue(data.vip_until, 'background');
-            } catch (err) {
-                Logger.log(`Heartbeat Error: ${err.message}`);
-            }
         },
 
         async start() {
@@ -1917,9 +1828,9 @@
                     const buyWhen = StateManager.state.config.buyWhen;
                     const lastBuy = parseInt(GM_getValue('mam_last_buy_time', '0'), 10);
 
-                    if (this.STORE_AUTOMATIONS_ENABLED && buyAmount !== 'Off' && StateManager.state.currentBP >= buyWhen && (Date.now() - lastBuy >= 30000)) {
-                        const storeProcessed = await this.processStoreQueue(null, 'batch');
-                        if (!storeProcessed || !StateManager.state.isRunning) {
+                    if (buyAmount !== 'Off' && StateManager.state.currentBP >= buyWhen && (Date.now() - lastBuy >= 30000)) {
+                        await this.checkUploadPurchase('batch');
+                        if (!StateManager.state.isRunning) {
                             abortReason = "stopped";
                             break;
                         }
@@ -1950,8 +1861,8 @@
 
             this.resetUI(shouldClear, finalColor);
 
-            if (this.STORE_AUTOMATIONS_ENABLED && StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
-                this.triggerHeartbeat();
+            if (StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
+                this.checkUploadPurchase('organic');
             }
         }
     };
@@ -2145,22 +2056,8 @@
             const header = mainBody.querySelector('h1');
             if (!header) return;
 
-            // 1. Scrape current username and UID from the top nav bar
-            const userMenu = document.getElementById('userMenu');
-            const myInfoLink = document.querySelector('a.myInfo[href^="/u/"]');
-
-            let myUsername = null;
-            let myUid = null;
-
-            if (userMenu) {
-                // Extracts "Photaz" from the child text nodes before the status icons
-                myUsername = userMenu.childNodes[0]?.textContent?.trim();
-            }
-
-            if (myInfoLink) {
-                const match = myInfoLink.getAttribute('href').match(/\/u\/(\d+)/);
-                if (match) myUid = match[1];
-            }
+            const myUsername = StateManager.myUsername;
+            const myUid = StateManager.myUid;
 
             if (!myUsername && !myUid) return;
 
@@ -2242,9 +2139,15 @@
                 }
             });
 
-            // Optimistic UI: Snooze alerts for 5 minutes when clicked to give the user time to complete them
+            // Bind alert interactions
             const vBtn = document.getElementById('btn-vault-alert');
             const lBtn = document.getElementById('btn-lotto-alert');
+            const vipBtn = document.getElementById('btn-vip-alert');
+
+            // Wire Crown anchor dynamically to own profile URL
+            const myInfoLink = document.querySelector('li.myInfo a[href*="/u/"]');
+            const myProfileUrl = myInfoLink ? myInfoLink.getAttribute('href') : (StateManager.myUid ? `/u/${StateManager.myUid}` : '#');
+            if (vipBtn) vipBtn.href = myProfileUrl;
 
             if (vBtn) vBtn.addEventListener('click', () => {
                 GM_setValue('mam_vault_next_reset', (Date.now() + 300000).toString());
@@ -2253,6 +2156,16 @@
             });
             if (lBtn) lBtn.addEventListener('click', () => {
                 GM_setValue('mam_lotto_next_check', (Date.now() + 300000).toString());
+                this.updateUI();
+                StateManager.broadcast('DAILIES_UPDATE');
+            });
+            if (vipBtn) vipBtn.addEventListener('click', () => {
+                // Arm the renewal flag for the profile page to consume
+                GM_setValue('mam_auto_renew_vip', '1');
+
+                // Advance the next recurring alert by 7 days
+                const nextAlert = Date.now() + (7 * 24 * 60 * 60 * 1000);
+                GM_setValue('mam_vip_next_alert', nextAlert.toString());
                 this.updateUI();
                 StateManager.broadcast('DAILIES_UPDATE');
             });
@@ -2291,6 +2204,7 @@
             const now = Date.now();
             const vaultBtn = document.getElementById('btn-vault-alert');
             const lottoBtn = document.getElementById('btn-lotto-alert');
+            const vipBtn = document.getElementById('btn-vip-alert');
 
             if (vaultBtn) {
                 const isEnabled = StateManager.state.config.storeAutomations.includes('Vault');
@@ -2302,6 +2216,18 @@
                 const isEnabled = StateManager.state.config.storeAutomations.includes('Lotto');
                 const nextLotto = parseInt(GM_getValue('mam_lotto_next_check', '0'), 10);
                 lottoBtn.style.display = (isEnabled && now > nextLotto) ? 'inline-block' : 'none';
+            }
+
+            if (vipBtn) {
+                const isEnabled = StateManager.state.config.storeAutomations.includes('VIP');
+                const nextAlert = parseInt(GM_getValue('mam_vip_next_alert', '0'), 10);
+
+                if (isEnabled && (nextAlert === 0 || now >= nextAlert)) {
+                    vipBtn.style.display = 'inline-block';
+                    vipBtn.title = "Renew VIP (Click to open profile & renew)";
+                } else {
+                    vipBtn.style.display = 'none';
+                }
             }
         }
     };
@@ -3222,7 +3148,96 @@
             if (!window.location.pathname.startsWith('/u/')) return;
 
             const uidMatch = window.location.pathname.match(/\/u\/(\d+)/) || (document.querySelector('input[name="uid"]') && [null, document.querySelector('input[name="uid"]').value]);
-            const uid = uidMatch ? uidMatch[1] : null;
+            const targetUid = uidMatch ? uidMatch[1] : null;
+            const myUid = StateManager.myUid;
+
+            // Strict Self Check: Scrape VIP expiration table row ONLY on own profile if VIP alerts are enabled
+            const isVipAlertEnabled = StateManager.state.config.storeAutomations.includes('VIP');
+
+            if (isVipAlertEnabled && myUid && targetUid && String(myUid) === String(targetUid)) {
+                const sendLog = (icon, text) => {
+                    Logger.log(`${logIcon(icon, 13)} ${text}`);
+                    StateManager.broadcast('LOGGER_SYNC', { icon, msg: text });
+                };
+
+                const rowheads = document.querySelectorAll('td.rowhead');
+                for (const rh of rowheads) {
+                    if (rh.textContent.trim().toLowerCase().includes('vip expiration')) {
+                        const valTd = rh.nextElementSibling;
+                        if (valTd) {
+                            const dateMatch = valTd.textContent.match(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
+                            if (dateMatch) {
+                                const expTimestamp = new Date(dateMatch[1].replace(/-/g, '/')).getTime();
+                                GM_setValue('mam_vip_expiration', expTimestamp.toString());
+
+                                const remainingMs = expTimestamp - Date.now();
+                                const maxVipMs = 12.8 * 7 * 24 * 60 * 60 * 1000;
+                                const minPurchaseMs = 7 * 24 * 60 * 60 * 1000;
+                                const remWeeks = (remainingMs / (7 * 24 * 60 * 60 * 1000)).toFixed(1);
+                                const canPurchaseWeek = remainingMs <= (maxVipMs - minPurchaseMs);
+
+                                GM_setValue('mam_auto_renew_vip', '0');
+
+                                const minReserve = StateManager.state.config.minReserve;
+                                const currentBP = StateManager.state.currentBP || 0;
+
+                                if (canPurchaseWeek) {
+                                    if (currentBP < (minReserve + 1250)) {
+                                        sendLog('stop', `VIP: Below BP reserve (${minReserve.toLocaleString('en-US')})`);
+                                    } else {
+                                        sendLog('load', 'Renewing VIP (Max)...');
+                                        (async () => {
+                                            try {
+                                                await Engine.enforceRateLimit(2000);
+                                                const res = await fetch('/json/bonusBuy.php?spendtype=VIP&duration=max', {
+                                                    headers: {
+                                                        'Accept': 'application/json, text/javascript, */*; q=0.01',
+                                                        'X-Requested-With': 'XMLHttpRequest'
+                                                    }
+                                                });
+                                                Engine.lastApiCall = Date.now();
+
+                                                if (res.ok) {
+                                                    const data = await res.json();
+                                                    if (data.success) {
+                                                        sendLog('crown', 'VIP topped off!');
+                                                        AuditLogger.add("Renewed VIP status (Max).");
+                                                        if (data.seedbonus !== undefined) {
+                                                            StateManager.updateBP(parseInt(data.seedbonus, 10));
+                                                        }
+
+                                                        const nextAlert = Date.now() + (7 * 24 * 60 * 60 * 1000);
+                                                        GM_setValue('mam_vip_next_alert', nextAlert.toString());
+
+                                                        if (data.vip_until) {
+                                                            const newExp = new Date(data.vip_until.replace(/-/g, '/')).getTime();
+                                                            GM_setValue('mam_vip_expiration', newExp.toString());
+                                                            const newWeeks = ((newExp - Date.now()) / (7 * 24 * 60 * 60 * 1000)).toFixed(1);
+                                                            valTd.innerHTML = `${data.vip_until}<br>${newWeeks} weeks`;
+                                                        }
+                                                    } else {
+                                                        sendLog('error', `VIP failed: ${data.error || 'Unknown error'}`);
+                                                    }
+                                                }
+                                            } catch (err) {
+                                                sendLog('error', `VIP error: ${err.message}`);
+                                            }
+                                        })();
+                                    }
+                                } else {
+                                    sendLog('crown', `VIP Synced: ${remWeeks} wks`);
+                                }
+
+                                if (typeof DailiesManager !== 'undefined') DailiesManager.updateUI();
+                                StateManager.broadcast('DAILIES_UPDATE');
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            const uid = targetUid;
 
             // 1. Revalidation: If user is marked invalid but is no longer disabled on-page, un-disable them
             if (uid && Database.hasInvalid(uid)) {
@@ -3372,12 +3387,9 @@
     AuditLogger.render();
     DailyTracker.updateUI();
 
-    // Check store queue on F5/Page Load if condition is met
-    const buyDue = StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP >= StateManager.state.config.buyWhen;
-    const vipDue = StateManager.state.config.storeAutomations.includes('VIP');
-
-    if (Engine.STORE_AUTOMATIONS_ENABLED && StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP !== null && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
-        Engine.triggerHeartbeat();
+    // Check upload purchase on page load if balance condition is met
+    if (StateManager.state.config.buyAmount !== 'Off' && StateManager.state.currentBP !== null && StateManager.state.currentBP >= StateManager.state.config.buyWhen) {
+        Engine.checkUploadPurchase('organic');
     }
 
     // Dynamically maintain queue metrics on database adjustment events
@@ -3397,23 +3409,6 @@
         }
     };
     window.addEventListener('mam-db-updated', updateStatsCount);
-
-    window.addEventListener('mam-native-gift-sent', (e) => {
-        const { uid, name, data } = e.detail;
-
-        // Unconditionally add to the database so they are recognized globally
-        Database.add(uid, name);
-
-        // Remove from the active visual queue if they happen to be in it
-        QueueManager.users = QueueManager.users.filter(u => u.id !== uid);
-        QueueManager.markGiftedUI();
-        updateStatsCount();
-
-        if (data.seedbonus !== undefined) {
-            StateManager.updateBP(parseInt(data.seedbonus, 10));
-        }
-        Logger.log(`${logIcon('check', 13)} Native gift synced: ${name}`);
-    });
 
     // Apply persistent visual states on page load and watch for native site AJAX updates
     QueueManager.markGiftedUI();
@@ -3533,10 +3528,10 @@
     bindMultiSegment('mam-cfg-social-gifting', 'socialGifting');
     bindMultiSegment('mam-cfg-store-automations', 'storeAutomations');
 
-    // UI Logic: Disable 'Buy When' if 'Buy Amount' is 'Off' or automations are paused
+    // UI Logic: Disable 'Buy When' if 'Buy Amount' is 'Off'
     const toggleBuyWhen = () => {
         const row = document.getElementById('row-buy-when');
-        if (!Engine.STORE_AUTOMATIONS_ENABLED || StateManager.state.config.buyAmount === 'Off') {
+        if (StateManager.state.config.buyAmount === 'Off') {
             row.style.opacity = '0.4';
             elBuyWhen.disabled = true;
         } else {
